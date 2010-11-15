@@ -24,7 +24,7 @@ if __name__ == '__main__':
   stream.on_recv(echo)
 
   def spew():
-    stream.send(sys.argv[1])
+    stream.send('pubkey')
 
   tim = ioloop.PeriodicCallback(spew, 1000, loop)
   tim.start()

@@ -1,6 +1,5 @@
 from zombie import crypt
 from zombie import exception
-from zombie import session
 from zombie import util
 
 def session_required(f):
@@ -13,14 +12,13 @@ def session_required(f):
 
 class Router(object):
   def __init__(self):
-    self._session = session.Manager()
     self._crypt = crypt.Manager()
 
   def route(self, ctx, msg):
-    print ctx
-    handler = self._get_handler(ctx, msg)
+    print ctx, msg
+    handler, parsed = self._get_handler(ctx, msg)
     if handler:
-      rv = handler(ctx, msg)
+      rv = handler(ctx, parsed)
       if rv:
         ctx.reply(rv)
   
@@ -30,7 +28,7 @@ class Router(object):
       return self.on_pubkey, msg
 
     # if we have a session first try to decrypt the message using that key
-    session_key = self._session.get(ctx.ident)
+    session_key = self._crypt.lookup_session_key(ctx.ident)
     decrypted = None
     if session_key:
       try:
@@ -57,11 +55,12 @@ class Router(object):
 
     return None, None
 
-  def on_pubkey(self, ctx):
-    return self._crypt.session_init_pubkey()
+  def on_pubkey(self, ctx, msg):
+    return str(self._crypt.session_init_pubkey())
 
-  
+  # TODO(termie): somewhat slow, DDoS target
   def on_session_init(self, ctx, msg):
     """The client sent us its pubkey, send it an encrypted session key."""
     encrypter = this._crypt.temporary_pubkey_encrypter(msg)
-    self._session.new(
+    session_key = self._session.generate(ctx)
+    return encrypter.encrypt(str(session_key))

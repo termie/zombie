@@ -10,9 +10,8 @@ class Context(object):
       setattr(self, k, v)
 
 
-  def reply(self, msg_parts):
-    msg_parts.insert(0, self.ident)
-    self.sock.send_multipart(msg_parts)
+  def reply(self, msg):
+    self.sock.send_multipart([self.ident, msg])
 
 
   def __str__(self):
