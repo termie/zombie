@@ -1,15 +1,3 @@
-import sys
-
-import eventlet
-from eventlet import greenpool
-from eventlet import greenthread
-from eventlet.green import zmq
-from eventlet.hubs import use_hub
-
-use_hub('zeromq')
-
-from zombie import context
-from zombie import router
 from zombie import world
 from zombie import net
 
