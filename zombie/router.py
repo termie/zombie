@@ -28,7 +28,7 @@ class Router(object):
       return self.on_pubkey, msg
 
     # if we have a session first try to decrypt the message using that key
-    session_key = self._crypt.lookup_session_key(ctx.ident)
+    session_key = self._crypt.get_session_key(ctx.ident)
     decrypted = None
     if session_key:
       try:
@@ -42,8 +42,7 @@ class Router(object):
     # a session initiation request
     if not decrypted:
       try:
-        decrypted = self._crypt.decrypt_session_init(msg)
-        parsed = util.deserialize(decrypted)
+        parsed = util.deserialize(msg)
         if not parsed.get('method', '').startswith('session'):
           raise exception.Error('invalid method')
       except exception.Error:
@@ -56,11 +55,19 @@ class Router(object):
     return None, None
 
   def on_pubkey(self, ctx, msg):
-    return str(self._crypt.session_init_pubkey())
+    return str(self._crypt.signing_pubkey())
+
+  def on_nop(self, ctx, msg):
+    return
 
   # TODO(termie): somewhat slow, DDoS target
   def on_session_init(self, ctx, msg):
     """The client sent us its pubkey, send it an encrypted session key."""
-    encrypter = this._crypt.temporary_pubkey_encrypter(msg)
-    session_key = self._session.generate(ctx)
-    return encrypter.encrypt(str(session_key))
+    encrypter = self._crypt.temporary_pubkey_encrypter(msg.get('pubkey'))
+    session_key = self._crypt.generate_session_key(ctx.ident)
+    msg = util.serialize({'session_key': str(session_key)})
+    return encrypter.encrypt(msg)
+
+  @session_required
+  def on_echo(self, ctx, msg):
+    return ctx.session_key.encrypt(util.serialize(msg))

@@ -21,9 +21,11 @@ def monkey_patch_keyczar_file_functions():
 r = redis.Redis()
 
 def WriteFile(data, loc):
+  print 'write >', loc
   r.set(loc, data)
 
 def ReadFile(loc):
+  print 'read <', loc
   rv = r.get(loc)
   if rv is None:
     raise Exception()
@@ -37,6 +39,7 @@ class Key(object):
   purpose = None
   asymmetric = None
   factory = None
+  kind = None
 
   def __init__(self, name, czar):
     self.name = name
@@ -49,7 +52,8 @@ class Key(object):
 
   @classmethod
   def generate(cls, name):
-    keyczart.Create(cls.prefix + name, name, cls.purpose, cls.asymmetric)
+    kmd = keydata.KeyMetadata(name, cls.purpose, cls.kind)
+    keyczar_util.WriteFile(str(kmd), cls.prefix + name + '/meta')
     keyczart.AddKey(cls.prefix + name, keyinfo.PRIMARY)
     
     # if we're asymmetric make a public key also
@@ -58,6 +62,18 @@ class Key(object):
 
     return cls.load(name)
 
+  @classmethod
+  def from_key(cls, name, key_string):
+    reader = StringReader(name, key_string, purpose=cls.purpose, kind=cls.kind)
+    return cls(name, cls.factory(reader))
+
+  def save(self):
+    reader = StringReader(
+        self.name, str(self), purpose=self.purpose, kind=self.kind)
+    genczar = keyczar.GenericKeyczar(reader)
+    genczar.Write()
+    return self.__class__.load(self.name)
+      
   def sign(self, s):
     return self.czar.Sign(s)
 
@@ -79,6 +95,7 @@ class SessionKey(Key):
   purpose = keyinfo.DECRYPT_AND_ENCRYPT
   asymmetric = None
   factory = keyczar.Crypter
+  kind = keyinfo.AES
 
 
 class PrivateCrypterKey(Key):
@@ -86,6 +103,7 @@ class PrivateCrypterKey(Key):
   purpose = keyinfo.DECRYPT_AND_ENCRYPT
   asymmetric = True
   factory = keyczar.Crypter
+  kind = keyinfo.RSA_PRIV
 
 
 class PrivateSignerKey(Key):
@@ -93,83 +111,66 @@ class PrivateSignerKey(Key):
   purpose = keyinfo.SIGN_AND_VERIFY
   asymmetric = True
   factory = keyczar.Signer
+  kind = keyinfo.DSA_PRIV
 
 
-class PublicKey(Key):
-  @classmethod
-  def from_key(cls, name, key_string):
-    reader = StringReader(name, key_string, purpose=cls.purpose)
-    genczar = keyczar.GenericKeyczar(reader)
-    genczar.Write(cls.prefix + name)
-    return cls.load(name)
-    
-
-class PublicEncrypterKey(PublicKey):
+class PublicEncrypterKey(Key):
   prefix = 'keys/crypter_public_'
   purpose = keyinfo.ENCRYPT
   asymmetric = True
   factory = keyczar.Encrypter
+  kind = keyinfo.RSA_PUB
 
 
-class PublicVerifierKey(PublicKey):
+class PublicVerifierKey(Key):
   prefix = 'keys/signer_public_'
   purpose = keyinfo.VERIFY
   asymmetric = True
   factory = keyczar.Verifier
+  kind = keyinfo.DSA_PUB
 
 
 class StringReader(readers.Reader):
-  def __init__(self, name, key_string, purpose):
-    if purpose == keyinfo.ENCRYPT:
-      type_ = keyinfo.RSA_PUB
-    else:
-      type_ = keyinfo.DSA_PUB
-
+  def __init__(self, name, key_string, purpose, kind):
     self.key_string = key_string
-    self.kmd = keydata.KeyMetadata(name, purpose, type_)
+    self.kmd = keydata.KeyMetadata(name, purpose, kind)
     version = keydata.KeyVersion(1, keyinfo.PRIMARY, False)
     self.kmd.AddVersion(version)
+    print self.kmd
 
   def GetMetadata(self):
     return str(self.kmd)
 
   def GetKey(self, version_number):
+    kmd = keydata.KeyMetadata.Read(self.GetMetadata())
+    print repr(kmd.type)
+    keys.ReadKey(kmd.type, self.key_string)
     return self.key_string
 
 
-class TemporaryPublicEncrypterKey(PublicEncrypterKey):
-  prefix = 'tmp/'
-
-  def __init__(self, key_string):
-    name = 'tmp'
-    reader = StringReader(name, key_string, purpose=self.purpose)
-    czar = keyczar.Encrypter(reader)
-    super(TemporaryPublicEncrypterKey, self).__init__(name, czar)
-
-
-
-
 class Manager(object):
-  session_init_keyname = 'session_init'
+  signing_keyname = 'session_init'
 
-  def decrypt_session_init(self, msg):
-    pass
-
-  def session_init_pubkey(self):
+  def signing_pubkey(self):
     try:
-      pubkey = PublicEncrypterKey.load(self.session_init_keyname)
+      pubkey = PublicVerifierKey.load(self.signing_keyname)
     except:
-      privkey = PrivateCrypterKey.generate(self.session_init_keyname)
-      pubkey = PublicEncrypterKey.load(self.session_init_keyname)
+      privkey = PrivateSignerKey.generate(self.signing_keyname)
+      pubkey = PublicVerifierKey.load(self.signing_keyname)
     return pubkey
 
   def temporary_pubkey_encrypter(self, pubkey):
-    pass
+    return PublicEncrypterKey.from_key('tmp', pubkey)
 
-  def lookup_session_key(self, ident):
+  def get_session_key(self, ident):
     ident_b64 = util.b64_encode(ident)
     try:
       return SessionKey.load(ident_b64)
-    except exception.Error:
+    except Exception:
       pass
     return
+
+  def generate_session_key(self, ident):
+    ident_b64 = util.b64_encode(ident)
+    return SessionKey.generate(ident_b64)
+
