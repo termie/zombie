@@ -1,4 +1,10 @@
+import eventlet
+
 from zombie import crypt
+from zombie import hooks
+from zombie.mod import accounts
+from zombie.mod import commands
+from zombie.mod import locations
 
 
 class World(object):
@@ -9,6 +15,7 @@ class World(object):
     self.rsa_pub = rsa_pub
     self.dsa_priv = dsa_priv
     self.dsa_pub = dsa_pub
+    self.pulses_per_second = 10
   
   @classmethod
   def generate(cls, name):
@@ -26,4 +33,70 @@ class World(object):
     return cls(name=name, rsa_priv=rsa_priv, rsa_pub=rsa_pub,
                dsa_priv=dsa_priv, dsa_pub=dsa_pub)
 
+  def init(self):
+    # load everything
+    # EVERYTHING
+    # pretend these are pluggable hooks
+    init_hooks = self._get_init_hooks()
+    for f in init_hooks:
+      f()
 
+    # self.load_objects()
+
+  def _get_init_hooks(self):
+    return [self._init_hooks,
+            #self._init_bodies,
+            #self._init_room_reset, # reset all rooms
+            #self._init_inform,
+            #self._init_settings,
+            #self._init_externals,
+            #self._init_actions,
+            #self._init_events,
+            self._init_locations,
+            self._init_accounts,
+            self._init_commands,
+            #self._init_items,
+            #self._init_aliases,
+            #self._init_time,
+            #self._init_help,
+            #self._init_scripts
+            ]
+  
+  def _init_hooks(self):
+    pass
+
+  def _init_accounts(self):
+    hooks.add('pre_message', accounts.authenticate, 0)
+  
+  def _init_commands(self):
+    hooks.add('method_spawn', commands.spawn)
+
+  def _init_locations(self):
+    hooks.add('method_spawn', locations.last_seen, 0)
+    for loc in locations.list_all():
+      locations.Location.load(loc)
+
+
+
+  def handle(self, ctx, parsed, msg, sig):
+    ctx.world = self
+    hooks.run('pre_message', ctx, parsed, msg, sig)
+    hooks.run('message', ctx, parsed)
+    hooks.run('method_' + parsed.get('method'), ctx, parsed)
+
+  def get_location(self, location_id):
+    return locations.Location.load(location_id)
+
+  def default_user_spawn(self):
+    return self.get_location(0)
+
+  def spawn(self, obj, location):
+    if not isinstance(location, locations.Location):
+      location = self.get_location(location)
+    
+    location.add_object(obj)
+
+
+  def worldloop(self):
+    while True:
+      eventlet.sleep(1 / self.pulses_per_second)

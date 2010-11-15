@@ -1,4 +1,6 @@
 from zombie import crypt
+from zombie import hooks
+from zombie import objects
 
 
 class Character(object):
@@ -26,4 +28,40 @@ class Character(object):
     return cls(name=name, rsa_priv=rsa_priv, rsa_pub=rsa_pub,
                dsa_priv=dsa_priv, dsa_pub=dsa_pub)
 
+  def init(self):
+    init_hooks = self._get_init_hooks()
+    for f in init_hooks:
+      f()
 
+  def _get_init_hooks(self):
+    return [self._init_hooks,
+            self._init_spawn,
+            #self._init_inventory,
+            #self._init_contacts,
+            #self._init_triggers,
+            #self._init_aliases,
+            #self._init_externals,
+            ]
+
+  def _init_hooks(self):
+    pass
+
+  def _init_spawn(self):
+    hooks.add('session_start', self.spawn)
+
+  def handle(self, client, message):
+    hooks.run('message', client, message)
+
+  def spawn(self, client):
+    client.send({'method': 'spawn'})
+
+
+class CharacterObject(objects.ActiveObject):
+  def __init__(self, ctx, dsa_pub):
+    pass
+
+  def located(self, location):
+    # on the new located event the following should occur:
+    # - acquire location session key
+    # - subscribe to location's PUB feed
+    ctx.event('located', str(location))

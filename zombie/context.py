@@ -1,3 +1,4 @@
+from zombie import log as logging
 from zombie import util
 
 class Context(object):
@@ -13,10 +14,13 @@ class Context(object):
   def ident_b64(self):
     return util.b64_encode(self.ident)
 
-  def send(self, msg, raw=False):
-    if self.session_key and not raw:
-      msg = self.session_key.encrypt(msg)
-    self.sock.send_multipart([self.ident, msg])
+  def send(self, msg, sig):
+    self.sock.send_multipart([self.ident, msg, sig])
+
+  def error(self, msg):
+    if not self.world:
+      pass
+    pass:
 
   def __str__(self):
     return repr(self.__dict__)
