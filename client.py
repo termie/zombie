@@ -1,13 +1,16 @@
-import math
 import sys
 
-import zmq
+import eventlet
+from eventlet import greenpool
+from eventlet import greenthread
+from eventlet.green import zmq
+from eventlet.hubs import use_hub
 
+use_hub('zeromq')
 
 from zombie import crypt
 from zombie import util
 
-from keyczar import util as keyczar_util
 
 if __name__ == '__main__':
   bind = 'ipc:///tmp/foo'
@@ -17,8 +20,6 @@ if __name__ == '__main__':
   ctx = zmq.Context()
   s = ctx.socket(zmq.XREQ)
   s.connect(bind)
-
-  crypt_man = crypt.Manager()
 
   # Make sure we have our own keys
   my_keyname = 'foo'
