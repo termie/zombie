@@ -8,8 +8,10 @@ from eventlet.hubs import use_hub
 
 use_hub('zeromq')
 
-from zombie import router
 from zombie import context
+from zombie import router
+from zombie import world
+from zombie import net
 
 
 # TODO(termie): allow requesting pubkey via http
@@ -18,19 +20,6 @@ from zombie import context
 if __name__ == '__main__':
   bind = 'ipc:///tmp/foo'
 
-  pool = greenpool.GreenPool()
-  
-  ctx = zmq.Context()
-  sock = ctx.socket(zmq.XREP)
-  sock.bind(bind)
-  
-  router = router.Router()
-
-  def slow_reply(sock, ident, msg):
-    sock.send_multipart([ident, msg])
-
-  while True:
-    msg_parts = sock.recv_multipart()
-    ident = msg_parts.pop(0)
-    c = context.Context(ident=ident, sock=sock, pool=pool)
-    pool.spawn_n(router.route, c, msg_parts[0])
+  foo = world.World.load('foo')
+  server = net.Server(foo)
+  server.listen(bind)
