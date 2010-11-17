@@ -10,6 +10,7 @@ from zombie import world
 
 
 if __name__ == '__main__':
+  bind = 'tcp://0.0.0.0:4000'
   bind = 'ipc:///tmp/foo'
   pool = shared.pool
 

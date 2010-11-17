@@ -20,7 +20,7 @@ class Context(object):
   def error(self, msg):
     if not self.world:
       pass
-    pass:
+    pass
 
   def __str__(self):
     return repr(self.__dict__)

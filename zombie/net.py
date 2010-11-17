@@ -32,6 +32,7 @@ class Server(object):
       ident = msg_parts.pop(0)
       c = context.Context(ident=ident, sock=sock, pool=pool)
       pool.spawn(self._route, c, msg_parts)
+      eventlet.sleep(0.1)
 
   def _route(self, ctx, msg_parts):
     logging.info('routing')
@@ -141,6 +142,8 @@ class Client(object):
     return self.serverinfo.dsa_pub.verify(s, sig)
 
   def send(self, msg):
+    if type(msg) != type({}):
+      msg = {'method': 'raw', 'raw': msg}
     msg['self'] = self.character.name
     logging.debug('send > %s', msg)
     msg = util.serialize(msg)

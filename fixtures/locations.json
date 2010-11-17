@@ -1,0 +1,47 @@
+[
+  {"id": "in_the_beginning",
+   "name": "In The Beginning",
+   "exits": [{"direction": "north", "location": "tutorial_0"},
+             {"direction": "down", "location": "tree_of_life"}]
+   },
+  {"id": "tutorial_0",
+   "name": "Welcome to Zombie",
+   "exits": [{"direction": "north", "location": "tutorial_1"},
+             {"direction": "south", "location": "in_the_beginning"}]
+   },
+  {"id": "tutorial_1",
+   "name": "Help and Commands",
+   "exits": [{"direction": "north", "location": "tutorial_2"},
+             {"direction": "south", "location": "tutorial_0"}]
+   },
+  {"id": "tutorial_2",
+   "name": "Good Luck",
+   "exits": [{"direction": "down", "location": "tree_of_life"},
+             {"direction": "south", "location": "tutorial_1"}]
+   },
+  {"id": "tree_of_life",
+   "name": "The Tree of Life",
+   "exits": [{"direction": "north", "location": "northern_meadow"},
+             {"direction": "south", "location": "southern_meadow"},
+             {"direction": "east", "location": "eastern_meadow"},
+             {"direction": "west", "location": "western_meadow"}
+             ]
+   },
+  {"id": "northern_meadow",
+   "name": "Northern Meadow",
+   "exits": [{"direction": "south", "location": "tree_of_life"}]
+   },
+  {"id": "southern_meadow",
+   "name": "Southern Meadow",
+   "exits": [{"direction": "north", "location": "tree_of_life"}]
+   },
+  {"id": "eastern_meadow",
+   "name": "Eastern Meadow",
+   "exits": [{"direction": "west", "location": "tree_of_life"}]
+   },
+  {"id": "western_meadow",
+   "name": "Western Meadow",
+   "exits": [{"direction": "east", "location": "tree_of_life"}]
+   }
+]
+
