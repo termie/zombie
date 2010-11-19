@@ -1,15 +1,17 @@
 import eventlet
 
 from zombie import crypt
+from zombie import event
 from zombie import hooks
 from zombie.mod import accounts
 from zombie.mod import commands
 from zombie.mod import locations
 
 
-class World(object):
+class World(event.EventEmitter):
   def __init__(self, name, rsa_priv=None, rsa_pub=None, dsa_priv=None,
-               dsa_pub=None):
+               dsa_pub=None, *args, **kw):
+    super(World, self).__init__(*args, **kw)
     self.name = name
     self.rsa_priv = rsa_priv
     self.rsa_pub = rsa_pub

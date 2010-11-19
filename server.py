@@ -10,8 +10,9 @@ from zombie import world
 
 
 if __name__ == '__main__':
-  bind = 'tcp://0.0.0.0:4000'
+  #bind = 'tcp://0.0.0.0:4000'
   bind = 'ipc:///tmp/foo'
+  pbind = 'ipc:///tmp/foopub'
   pool = shared.pool
 
   foo = world.World.load('foo')
@@ -24,6 +25,9 @@ if __name__ == '__main__':
   server = net.Server(foo)
   print 'listening for connections'
   pool.spawn(server.listen, bind)
+
+  print 'publisher active'
+  pool.spawn(server.publish, pbind)
   
   worldloop.wait()
   print 'done'

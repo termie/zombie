@@ -21,11 +21,11 @@ def monkey_patch_keyczar_file_functions():
 r = redis.Redis()
 
 def WriteFile(data, loc):
-  print 'write >', loc
+  print 'kvs >', loc
   r.set(loc, data)
 
 def ReadFile(loc):
-  print 'read <', loc
+  print 'kvs <', loc
   rv = r.get(loc)
   if rv is None:
     raise Exception()
@@ -136,14 +136,12 @@ class StringReader(readers.Reader):
     self.kmd = keydata.KeyMetadata(name, purpose, kind)
     version = keydata.KeyVersion(1, keyinfo.PRIMARY, False)
     self.kmd.AddVersion(version)
-    print self.kmd
 
   def GetMetadata(self):
     return str(self.kmd)
 
   def GetKey(self, version_number):
     kmd = keydata.KeyMetadata.Read(self.GetMetadata())
-    print repr(kmd.type)
     keys.ReadKey(kmd.type, self.key_string)
     return self.key_string
 

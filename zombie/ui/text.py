@@ -8,7 +8,9 @@ from zombie import shared
 class TextUi(object):
   def __init__(self, character, address):
     self.character = character
-    self.address = address
+    self.wclient = None
+    self.lclient = None
+    self.waddress = address
 
   def _setup_readline(self):
     try:
@@ -23,14 +25,14 @@ class TextUi(object):
 
     atexit.register(readline.write_history_file, '.zombiehist')
 
-
   def run(self):
     self._setup_readline()
     
-    self.client = net.Client(self.character)
-    self.client.connect(self.address)
+    self.wclient = net.Client(self.character)
+    self.wclient.connect(self.waddress)
+    self.wclient.subscribe()
 
-    shared.pool.spawn_n(self.client.clientloop)
+    shared.pool.spawn_n(self.wclient.clientloop)
 
     while True:
       data = raw_input()
@@ -38,4 +40,7 @@ class TextUi(object):
 
   def handle_input(self, data):
     cmd, sep, rest = data.partition(' ')
-    self.client.send({'method': cmd, 'args': rest})
+    if self.lclient:
+      self.lclient.rpc({'method': cmd, 'args': rest})
+    else:
+      self.wclient.rpc({'method': cmd, 'args': rest})
