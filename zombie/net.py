@@ -12,12 +12,6 @@ from zombie import shared
 from zombie import util
 
 
-class ServerInfo(object):
-  def __init__(self, address, dsa_pub):
-    self.address = address
-    self.dsa_pub = dsa_pub
-
-
 class Server(object):
   """Servers handle normal connections and publishing connections."""
 
@@ -29,9 +23,9 @@ class Server(object):
     self._laddress = None
 
   def listen(self, address):
-    ctx = shared.zmq_context
+    zctx = shared.zmq_context
     pool = shared.pool
-    sock = ctx.socket(zmq.XREP)
+    sock = zctx.socket(zmq.XREP)
     sock.bind(address)
 
     self._laddress = address
@@ -40,14 +34,18 @@ class Server(object):
     while True:
       msg_parts = sock.recv_multipart()
       ident = msg_parts.pop(0)
-      c = context.Context(ident=ident, sock=sock, pool=pool)
+      ident_b64 = util.b64_encode(ident)
+      c = context.Context(ident=ident,
+                          ident_b64=ident_b64,
+                          sock=sock,
+                          pool=pool)
       rv = pool.spawn(self._route, c, msg_parts)
       eventlet.sleep(0.1)
 
   def publish(self, address):
-    ctx = shared.zmq_context
+    zctx = shared.zmq_context
     pool = shared.pool
-    sock = ctx.socket(zmq.PUB)
+    sock = zctx.socket(zmq.PUB)
     sock.bind(address)
 
     self._paddress = address
@@ -70,7 +68,7 @@ class Server(object):
 
     # if we have a session first try to decrypt the message using that key
     try:
-      session_key = crypt.SessionKey.load(ctx.ident_b64)
+      session_key = crypt.SessionKey.load(self.proxy.name + ctx['ident_b64'])
     except Exception:
       session_key = None
     
@@ -78,7 +76,7 @@ class Server(object):
       logging.info('session key found')
       try:
         decrypted = session_key.decrypt(msg)
-        ctx.session_key = session_key
+        ctx['session_key'] = session_key
         parsed = util.deserialize(decrypted)
         logging.debug('parsed: %s', parsed)
         if parsed.get('method') == 'subscribe_start':
@@ -108,25 +106,25 @@ class Server(object):
                           'subscribe_address': str(self._paddress),
                           'uuid': parsed['uuid'],
                           })
-    msg = ctx.session_key.encrypt(msg)
+    msg = ctx['session_key'].encrypt(msg)
     sig = self._sign(msg)
     ctx.send(msg, sig)
 
   def _on_session_start(self, ctx, parsed):
     """The client sent us its pubkey, send it an encrypted session key."""
     logging.debug('starting new session')
-    session_key = crypt.SessionKey.generate(ctx.ident_b64)
+    session_key = crypt.SessionKey.generate(self.proxy.name + ctx['ident_b64'])
     rsa_pub = parsed.get('rsa_pub')
-    encrypter = crypt.PublicEncrypterKey.from_key(
-        ctx.ident_b64, parsed.get('rsa_pub'))
+    encrypter = crypt.PublicEncrypterKey.from_key(ctx['ident_b64'],
+                                                  parsed.get('rsa_pub'))
     out = {'session_key': str(session_key)}
     out['uuid'] = 0
     msg = util.serialize(out)
     logging.debug('serialized, length: %s', len(msg))
     msg = encrypter.encrypt(msg)
-
     sig = self._sign(msg)
     ctx.send(msg, sig)
+    logging.debug('sent session_start response')
 
   def _sign(self, s):
     return self.proxy.dsa_priv.sign(s)
@@ -134,9 +132,10 @@ class Server(object):
 
 class Client(object):
   def __init__(self, proxy):
-    self._looping = False
+    self._clooping = False
     self._csock = None
     self._caddress = None
+    self._slooping = False
     self._ssock = None
     self._saddress = None
     self._waiters = {}
@@ -145,8 +144,8 @@ class Client(object):
     self.proxy = proxy
 
   def connect(self, address):
-    ctx = shared.zmq_context
-    sock = ctx.socket(zmq.XREQ)
+    zctx = shared.zmq_context
+    sock = zctx.socket(zmq.XREQ)
     sock.connect(address)
 
     self._csock = sock
@@ -169,11 +168,12 @@ class Client(object):
     self._skey = crypt.SessionKey.from_key('subscribe', rv['subscribe_key'])
     self._saddress = str(rv['subscribe_address'])
 
-    ctx = shared.zmq_context
-    sock = ctx.socket(zmq.SUB)
+    zctx = shared.zmq_context
+    sock = zctx.socket(zmq.SUB)
     sock.setsockopt(zmq.SUBSCRIBE, '')
     sock.connect(self._saddress)
     self._ssock = sock
+    logging.debug('subscribed to %s', self._saddress)
   
   def rpc(self, method, **kw):
     logging.debug('rpc: %s', method)
@@ -187,7 +187,7 @@ class Client(object):
     # for the clientloop to run while we are waiting
     def _runloop():
       while not ev.ready():
-        self.clientloop(once=True)
+        self.controlloop(once=True)
 
     shared.pool.spawn_n(_runloop)
     rv = ev.wait()
@@ -202,10 +202,11 @@ class Client(object):
     self._waiters[key] = ev
   
   def _crecv(self):
+    logging.debug('_crecv(%s)', self._caddress)
     if not self._csock:
       return
     msg, sig = self._csock.recv_multipart()
-    logging.debug('MSG %s', msg)
+    logging.debug('ctrl_msg %s', msg)
     valid = self._server_key.verify(msg, sig)
     if not valid:
       return
@@ -223,10 +224,12 @@ class Client(object):
     return msg
 
   def _srecv(self):
+    logging.debug('_srecv(%s)', self._saddress)
     if not self._ssock:
       return
     
     msg, sig = self._ssock.recv_multipart()
+    logging.debug('sub_msg %s', msg)
     valid = self._server_key.verify(msg, sig)
     if not valid:
       return
@@ -250,19 +253,32 @@ class Client(object):
   def _verify(self, s, sig):
     return self.serverinfo.dsa_pub.verify(s, sig)
 
-  def clientloop(self, once=False):
+  def controlloop(self, once=False):
     while True:
-      if self._looping:
+      if self._clooping:
         eventlet.sleep(0.1)
         return
-      self._looping = True
+      self._clooping = True
       if self._csock:
         msg = self._crecv()
-        self.proxy.handle(self, msg)
+        if msg:
+          self.proxy.handle(self, msg)
+      self._clooping = False
+      if once:
+        return
+      eventlet.sleep(0.1)
+
+  def subscribeloop(self, once=False):
+    while True:
+      if self._slooping:
+        eventlet.sleep(0.1)
+        return
+      self._slooping = True
       if self._ssock:
         msg = self._srecv()
-        self.proxy.handle(self, msg)
-      self._looping = False
+        if msg:
+          self.proxy.handle(self, msg)
+      self._slooping = False
       if once:
         return
       eventlet.sleep(0.1)

@@ -1,26 +1,31 @@
 from zombie import log as logging
 from zombie import util
 
-class Context(object):
-  def __init__(self, ident, sock, pool, **kw):
-    self.ident = ident
-    self.sock = sock
-    self.pool = pool
-    self.session_key = None
-    for k, v in kw.iteritems():
-      setattr(self, k, v)
-
-  @property
-  def ident_b64(self):
-    return util.b64_encode(self.ident)
+class Context(dict):
+  def __init__(self, *args, **kw):
+    dict.__init__(self, *args, **kw)
 
   def send(self, msg, sig):
-    self.sock.send_multipart([self.ident, msg, sig])
+    self['sock'].send_multipart([self['ident'], msg, sig])
+
+  def reply(self, parsed, **kw):
+    response = {}
+    response.update(kw)
+    if 'uuid' in parsed:
+      response['uuid'] = parsed['uuid']
+    encrypted = self['session_key'].encrypt(util.serialize(response))
+    if self['world']:
+      signer = self['world'].dsa_priv
+    elif self['location']:
+      signer = self['location'].dsa_priv
+
+    sig = signer.sign(encrypted)
+    self.send(encrypted, sig)
 
   def error(self, msg):
-    if not self.world:
+    if not self['world']:
       pass
     pass
 
   def __str__(self):
-    return repr(self.__dict__)
+    return repr(self)

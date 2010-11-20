@@ -1,17 +1,30 @@
 import json
 
+import eventlet
 from eventlet.green import zmq
 
 from zombie import crypt
+from zombie import event
 from zombie import kvs
 from zombie import log as logging
 from zombie import shared
 from zombie import util
+from zombie.mod import accounts
 
 r = kvs.Storage('locations_')
 
+@accounts.auth_required
 def last_seen(ctx, parsed):
-  ctx.last_seen = kvs.get('last_seen_' + ctx.who)
+  ctx['last_seen'] = r.get('last_seen_' + ctx['who'])
+
+
+@accounts.auth_required
+def default_location(ctx, parsed):
+  loc = util.deserialize(r.get('default'))
+  loc_ref = Location(**loc)
+
+  ctx.reply(parsed, location=str(loc_ref))
+  return True
 
 # Locations get a topic, objects in that location are
 # expected to subscribe to it, events there are published to subscribers
@@ -22,18 +35,25 @@ LOCATIONS = {}
 def list_all():
   return util.deserialize(r.get('all'))
 
-class Location(object):
-  def __init__(self, id, address=None, dsa_priv=None, dsa_pub=None,
-               session_key=None, name=None, exits=None):
+
+
+class Location(event.EventEmitter):
+  def __init__(self, id, laddress=None, paddress=None, dsa_priv=None,
+               dsa_pub=None, session_key=None, name=None, exits=None, **kw):
+    super(Location, self).__init__()
     self.id = id
-    self.address = address
+    self.laddress = str(laddress)
+    self.paddress = str(paddress)
+    self.dsa_pub = crypt.PublicVerifierKey.from_key('dsa_pub', dsa_pub)
+    self.dsa_priv = crypt.PrivateSignerKey.from_key('dsa_priv', dsa_priv)
+    self.session_key = session_key
+    self.name = name
+    self.exits = exits
     self._sock = None
+    self.pulses_per_second = 40
 
   def init(self):
-    ctx = shared.zmq_context
-    sock = ctx.socket(zmq.PUB)
-    sock.bind(str(self.address))
-    self._sock = sock
+    pass
 
   @classmethod
   def load(cls, location_id):
@@ -42,14 +62,18 @@ class Location(object):
       session_key = kvs.get('session_key_' + location_id)
       info['session_key'] = session_key
       location = cls(**info)
-      location.init()
       LOCATIONS[location_id] = location
     return LOCATIONS[location_id]
 
-  def add_object(self, obj, referer=None):
-    self.objects.append(obj)
-    obj.located(location)
-    hooks.run('add_object', location, obj, referer)
+  def to_dict(self):
+    return {'id': self.id, 'address': self.address}
+  
+  def __str__(self):
+    return util.serialize(self.to_dict())
+  
+  def locationloop(self):
+    while True:
+      eventlet.sleep(1 / self.pulses_per_second)
 
 
 def load_from_file(filename):
@@ -78,7 +102,11 @@ def load_from_file(filename):
     
     loc['dsa_priv'] = str(dsa_priv)
     loc['dsa_pub'] = str(dsa_pub)
-    loc['address'] = 'ipc:///tmp/' + loc['id']
+    loc['laddress'] = 'ipc:///tmp/' + loc['id']
+    loc['paddress'] = 'ipc:///tmp/' + loc['id'] + 'pub'
+    if loc.get('default', 0):
+      logging.info('setting default location: %s', loc['id'])
+      r.set('default', util.serialize(loc))
     r.set(loc['id'], util.serialize(loc))
 
   r.set('all', util.serialize(by_id.keys()))

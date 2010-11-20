@@ -1,6 +1,7 @@
 from zombie import crypt
 from zombie import hooks
 from zombie import objects
+from zombie import util
 
 
 class Character(object):
@@ -55,6 +56,13 @@ class Character(object):
   def spawn(self, client):
     client.send({'method': 'spawn'})
 
+  def to_dict(self):
+    return {'name': self.name,
+            'dsa_pub': str(self.dsa_pub),
+            'rsa_pub': str(self.rsa_pub)}
+
+  def __str__(self):
+    return util.serialize(self.to_dict())
 
 class CharacterObject(objects.ActiveObject):
   def __init__(self, ctx, dsa_pub):

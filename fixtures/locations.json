@@ -1,6 +1,7 @@
 [
   {"id": "in_the_beginning",
    "name": "In The Beginning",
+   "default": 1,
    "exits": [{"direction": "north", "location": "tutorial_0"},
              {"direction": "down", "location": "tree_of_life"}]
    },

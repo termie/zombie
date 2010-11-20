@@ -3,6 +3,8 @@ import eventlet
 from zombie import crypt
 from zombie import event
 from zombie import hooks
+from zombie import net
+from zombie import shared
 from zombie.mod import accounts
 from zombie.mod import commands
 from zombie.mod import locations
@@ -69,21 +71,35 @@ class World(event.EventEmitter):
 
   def _init_accounts(self):
     hooks.add('pre_message', accounts.authenticate, 0)
+    hooks.add('method_register', accounts.register)
   
   def _init_commands(self):
     hooks.add('method_spawn', commands.spawn)
 
   def _init_locations(self):
     hooks.add('method_spawn', locations.last_seen, 0)
-    for loc in locations.list_all():
-      locations.Location.load(loc)
+    hooks.add('method_default_location', locations.default_location)
 
+    #for loc in locations.list_all():
+    #  def _load_loc(loc):
+    #    loc_ref = locations.Location.load(loc)
+    #    s = net.Server(loc_ref)
+    #    l = shared.pool.spawn(s.listen, loc_ref.laddress)
+    #    p = shared.pool.spawn(s.publish, loc_ref.paddress)
+
+    #  shared.pool.spawn(_load_loc, loc)
 
 
   def handle(self, ctx, parsed, msg, sig):
-    ctx.world = self
+    ctx['world'] = self
+
+    # mostly for things like authentication
     hooks.run('pre_message', ctx, parsed, msg, sig)
+
+    # things that trigger on every/any message
     hooks.run('message', ctx, parsed)
+
+    # whoever is going to handle this command
     hooks.run('method_' + parsed.get('method'), ctx, parsed)
 
   def get_location(self, location_id):

@@ -71,7 +71,7 @@ class Key(object):
     reader = StringReader(
         self.name, str(self), purpose=self.purpose, kind=self.kind)
     genczar = keyczar.GenericKeyczar(reader)
-    genczar.Write()
+    genczar.Write(self.prefix + self.name)
     return self.__class__.load(self.name)
       
   def sign(self, s):
