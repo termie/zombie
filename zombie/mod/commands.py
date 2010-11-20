@@ -1,7 +1,7 @@
 from zombie import exception
 from zombie import objects
 from zombie.mod import accounts
-from zombie.mod import locations
+from zombie.mod import location
 
 @accounts.auth_required
 def spawn(ctx, parsed):

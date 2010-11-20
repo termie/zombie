@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from zombie.mod import locations
+from zombie.mod import location
 
 if __name__ == '__main__':
-  locations.load_from_file(sys.argv[1])
+  location.load_from_file(sys.argv[1])

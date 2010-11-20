@@ -4,5 +4,5 @@ from eventlet.hubs import use_hub
 
 use_hub('zeromq')
 
-zmq_context = zmq.Context()
+zctx = zmq.Context()
 pool = greenpool.GreenPool()

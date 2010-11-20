@@ -19,45 +19,42 @@ class Server(object):
     self.proxy = proxy
     self._psock = None
     self._paddress = None
-    self._lsock = None
-    self._laddress = None
+    self._csock = None
+    self._caddress = None
 
-  def listen(self, address):
-    zctx = shared.zmq_context
-    pool = shared.pool
-    sock = zctx.socket(zmq.XREP)
+  def init_control(self, address):
+    """Set up the control socket."""
+    sock = shared.zctx.socket(zmq.XREP)
     sock.bind(address)
+    self._caddress = address
+    self._csock = sock
 
-    self._laddress = address
-    self._lsock = sock
+  def init_pubsub(self, address):
+    """Set up the pubsub socket."""
+    sock = shared.zctx.socket(zmq.PUB)
+    sock.bind(address)
+    self._paddress = address
+    self._psock = sock
+    self._pkey = crypt.SessionKey.generate('pubsub_' + uuid.uuid4().hex)
+    self.proxy.on('notify', self._notify)
 
+  def control_loop(self):
     while True:
-      msg_parts = sock.recv_multipart()
+      msg_parts = self._csock.recv_multipart()
       ident = msg_parts.pop(0)
       ident_b64 = util.b64_encode(ident)
       c = context.Context(ident=ident,
                           ident_b64=ident_b64,
-                          sock=sock,
-                          pool=pool)
-      rv = pool.spawn(self._route, c, msg_parts)
+                          sock=self._csock,
+                          pool=shared.pool)
+      rv = shared.pool.spawn(self._handle_control, c, msg_parts)
       eventlet.sleep(0.1)
 
-  def publish(self, address):
-    zctx = shared.zmq_context
-    pool = shared.pool
-    sock = zctx.socket(zmq.PUB)
-    sock.bind(address)
 
-    self._paddress = address
-    self._psock = sock
-    
-    self._pkey = crypt.SessionKey.generate('publish_' + uuid.uuid4().hex)
-    self.proxy.on('notify', self._notify)
-    
   def _notify(self, msg):
     self._psock.send_multipart([msg, self._sign(msg)])
 
-  def _route(self, ctx, msg_parts):
+  def _handle_control(self, ctx, msg_parts):
     logging.info('routing: %s, %s', *msg_parts)
 
     # special case to request pubkey, everything else will be encrypted
@@ -144,8 +141,7 @@ class Client(object):
     self.proxy = proxy
 
   def connect(self, address):
-    zctx = shared.zmq_context
-    sock = zctx.socket(zmq.XREQ)
+    sock = shared.zctx.socket(zmq.XREQ)
     sock.connect(address)
 
     self._csock = sock
@@ -168,7 +164,7 @@ class Client(object):
     self._skey = crypt.SessionKey.from_key('subscribe', rv['subscribe_key'])
     self._saddress = str(rv['subscribe_address'])
 
-    zctx = shared.zmq_context
+    zctx = shared.zctx
     sock = zctx.socket(zmq.SUB)
     sock.setsockopt(zmq.SUBSCRIBE, '')
     sock.connect(self._saddress)

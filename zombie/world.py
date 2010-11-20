@@ -7,7 +7,7 @@ from zombie import net
 from zombie import shared
 from zombie.mod import accounts
 from zombie.mod import commands
-from zombie.mod import locations
+from zombie.mod import location
 
 
 class World(event.EventEmitter):
@@ -56,7 +56,7 @@ class World(event.EventEmitter):
             #self._init_externals,
             #self._init_actions,
             #self._init_events,
-            self._init_locations,
+            self._init_location,
             self._init_accounts,
             self._init_commands,
             #self._init_items,
@@ -76,19 +76,18 @@ class World(event.EventEmitter):
   def _init_commands(self):
     hooks.add('method_spawn', commands.spawn)
 
-  def _init_locations(self):
-    hooks.add('method_spawn', locations.last_seen, 0)
-    hooks.add('method_default_location', locations.default_location)
+  def _init_location(self):
+    hooks.add('method_spawn', location.last_seen, 0)
+    hooks.add('method_default_location', location.default_location)
 
-    #for loc in locations.list_all():
+    #for loc in location.list_all():
     #  def _load_loc(loc):
-    #    loc_ref = locations.Location.load(loc)
+    #    loc_ref = location.Location.load(loc)
     #    s = net.Server(loc_ref)
     #    l = shared.pool.spawn(s.listen, loc_ref.laddress)
     #    p = shared.pool.spawn(s.publish, loc_ref.paddress)
 
     #  shared.pool.spawn(_load_loc, loc)
-
 
   def handle(self, ctx, parsed, msg, sig):
     ctx['world'] = self
@@ -102,19 +101,6 @@ class World(event.EventEmitter):
     # whoever is going to handle this command
     hooks.run('method_' + parsed.get('method'), ctx, parsed)
 
-  def get_location(self, location_id):
-    return locations.Location.load(location_id)
-
-  def default_user_spawn(self):
-    return self.get_location(0)
-
-  def spawn(self, obj, location):
-    if not isinstance(location, locations.Location):
-      location = self.get_location(location)
-    
-    location.add_object(obj)
-
-
-  def worldloop(self):
+  def world_loop(self):
     while True:
       eventlet.sleep(1 / self.pulses_per_second)
