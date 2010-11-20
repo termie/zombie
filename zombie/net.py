@@ -36,7 +36,7 @@ class Server(object):
     self._paddress = address
     self._psock = sock
     self._pkey = crypt.SessionKey.generate('pubsub_' + uuid.uuid4().hex)
-    self.proxy.on('notify', self._notify)
+    self.proxy.on('notify', self._handle_notify)
 
   def control_loop(self):
     while True:
@@ -50,8 +50,7 @@ class Server(object):
       rv = shared.pool.spawn(self._handle_control, c, msg_parts)
       eventlet.sleep(0.1)
 
-
-  def _notify(self, msg):
+  def _handle_notify(self, msg):
     self._psock.send_multipart([msg, self._sign(msg)])
 
   def _handle_control(self, ctx, msg_parts):
@@ -59,7 +58,7 @@ class Server(object):
 
     # special case to request pubkey, everything else will be encrypted
     if msg_parts[0] == 'dsa_pub':
-      self._on_dsa_pub(ctx)
+      self._cmd_dsa_pub(ctx)
 
     msg, sig = msg_parts
 
@@ -77,7 +76,7 @@ class Server(object):
         parsed = util.deserialize(decrypted)
         logging.debug('parsed: %s', parsed)
         if parsed.get('method') == 'subscribe_start':
-          return self._on_subscribe_start(ctx, parsed)
+          return self._cmd_subscribe_start(ctx, parsed)
         return self.proxy.handle(ctx, parsed, msg, sig)
       except Exception:
         pass
@@ -88,16 +87,16 @@ class Server(object):
       parsed = util.deserialize(msg)
       logging.debug('parsed (unencrypted): %s', parsed)
       if parsed.get('method') == 'session_start':
-        self._on_session_start(ctx, parsed)
+        self._cmd_session_start(ctx, parsed)
     except Exception:
       pass
 
-  def _on_dsa_pub(self, ctx):
+  def _cmd_dsa_pub(self, ctx):
     logging.debug('DSA_PUB')
     msg = str(self.proxy.dsa_pub)
     ctx.send(msg, self._sign(msg))
 
-  def _on_subscribe_start(self, ctx, parsed):
+  def _cmd_subscribe_start(self, ctx, parsed):
     logging.debug('new subscriber')
     msg = util.serialize({'subscribe_key': str(self._pkey),
                           'subscribe_address': str(self._paddress),
@@ -107,7 +106,7 @@ class Server(object):
     sig = self._sign(msg)
     ctx.send(msg, sig)
 
-  def _on_session_start(self, ctx, parsed):
+  def _cmd_session_start(self, ctx, parsed):
     """The client sent us its pubkey, send it an encrypted session key."""
     logging.debug('starting new session')
     session_key = crypt.SessionKey.generate(self.proxy.name + ctx['ident_b64'])
@@ -132,15 +131,15 @@ class Client(object):
     self._clooping = False
     self._csock = None
     self._caddress = None
-    self._slooping = False
-    self._ssock = None
-    self._saddress = None
+    self._plooping = False
+    self._psock = None
+    self._paddress = None
     self._waiters = {}
     self._connected = False
     self._session_key = None
     self.proxy = proxy
 
-  def connect(self, address):
+  def connect_control(self, address):
     sock = shared.zctx.socket(zmq.XREQ)
     sock.connect(address)
 
@@ -156,20 +155,21 @@ class Client(object):
     self._server_key = dsa_pub_key
 
     # Start our session
-    self._session_key = self._session_start()
+    rv = self.rpc('session_start', rsa_pub=str(self.proxy.rsa_pub), uuid=0)
+    self._session_key = crypt.SessionKey.from_key('session', rv['session_key'])
 
-  def subscribe(self):
+  def connect_pubsub(self):
     # We get the subscription address via the main connection
     rv = self.rpc('subscribe_start')
     self._skey = crypt.SessionKey.from_key('subscribe', rv['subscribe_key'])
-    self._saddress = str(rv['subscribe_address'])
+    self._paddress = str(rv['subscribe_address'])
 
     zctx = shared.zctx
     sock = zctx.socket(zmq.SUB)
     sock.setsockopt(zmq.SUBSCRIBE, '')
-    sock.connect(self._saddress)
-    self._ssock = sock
-    logging.debug('subscribed to %s', self._saddress)
+    sock.connect(self._paddress)
+    self._psock = sock
+    logging.debug('subscribed to %s', self._paddress)
   
   def rpc(self, method, **kw):
     logging.debug('rpc: %s', method)
@@ -177,24 +177,59 @@ class Client(object):
     msg['uuid'] = uuid.uuid4().hex
     msg.update(kw)
     ev = e_event.Event()
-    self._add_rpc_waiter(msg['uuid'], ev)
-    self._sign_and_send(msg)
+    self._wait_for(msg['uuid'], ev)
+    self.sign_and_send(msg)
     
     # for the clientloop to run while we are waiting
-    def _runloop():
+    def _forceloop():
       while not ev.ready():
-        self.controlloop(once=True)
+        self.control_loop(once=True)
 
-    shared.pool.spawn_n(_runloop)
+    shared.pool.spawn_n(_forceloop)
     rv = ev.wait()
     logging.debug('got response for %s', method)
     return rv
 
-  def _session_start(self):
-    rv = self.rpc('session_start', rsa_pub=str(self.proxy.rsa_pub), uuid=0)
-    return crypt.SessionKey.from_key('session', rv['session_key'])
-  
-  def _add_rpc_waiter(self, key, ev):
+  def sign_and_send(self, msg):
+    msg['self'] = self.proxy.name
+    msg = util.serialize(msg)
+    logging.debug('sending: %s', msg)
+    if self._session_key:
+      msg = self._session_key.encrypt(msg)
+    sig = self._sign(msg)
+    return self._csock.send_multipart([msg, sig])
+
+  def control_loop(self, once=False):
+    while True:
+      if self._clooping:
+        eventlet.sleep(0.1)
+        return
+      self._clooping = True
+      if self._csock:
+        msg = self._crecv()
+        if msg:
+          self.proxy.handle(self, msg)
+      self._clooping = False
+      if once:
+        return
+      eventlet.sleep(0.1)
+
+  def pubsub_loop(self, once=False):
+    while True:
+      if self._plooping:
+        eventlet.sleep(0.1)
+        return
+      self._plooping = True
+      if self._psock:
+        msg = self._srecv()
+        if msg:
+          self.proxy.handle(self, msg)
+      self._plooping = False
+      if once:
+        return
+      eventlet.sleep(0.1)
+
+  def _wait_for(self, key, ev):
     self._waiters[key] = ev
   
   def _crecv(self):
@@ -220,11 +255,11 @@ class Client(object):
     return msg
 
   def _srecv(self):
-    logging.debug('_srecv(%s)', self._saddress)
-    if not self._ssock:
+    logging.debug('_srecv(%s)', self._paddress)
+    if not self._psock:
       return
     
-    msg, sig = self._ssock.recv_multipart()
+    msg, sig = self._psock.recv_multipart()
     logging.debug('sub_msg %s', msg)
     valid = self._server_key.verify(msg, sig)
     if not valid:
@@ -234,47 +269,9 @@ class Client(object):
     msg = util.deserialize(msg)
     return msg
 
-  def _sign_and_send(self, msg):
-    msg['self'] = self.proxy.name
-    msg = util.serialize(msg)
-    logging.debug('sending: %s', msg)
-    if self._session_key:
-      msg = self._session_key.encrypt(msg)
-    sig = self._sign(msg)
-    return self._csock.send_multipart([msg, sig])
-
   def _sign(self, s):
     return self.proxy.dsa_priv.sign(s)
 
   def _verify(self, s, sig):
     return self.serverinfo.dsa_pub.verify(s, sig)
 
-  def controlloop(self, once=False):
-    while True:
-      if self._clooping:
-        eventlet.sleep(0.1)
-        return
-      self._clooping = True
-      if self._csock:
-        msg = self._crecv()
-        if msg:
-          self.proxy.handle(self, msg)
-      self._clooping = False
-      if once:
-        return
-      eventlet.sleep(0.1)
-
-  def subscribeloop(self, once=False):
-    while True:
-      if self._slooping:
-        eventlet.sleep(0.1)
-        return
-      self._slooping = True
-      if self._ssock:
-        msg = self._srecv()
-        if msg:
-          self.proxy.handle(self, msg)
-      self._slooping = False
-      if once:
-        return
-      eventlet.sleep(0.1)

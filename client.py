@@ -16,11 +16,5 @@ if __name__ == '__main__':
 
   
   ui = text.TextUi(termie, bind)
-  g = ui.run()
+  ui.run()
   shared.pool.waitall()
-  
-
-  #client = net.Client(termie)
-  #client.connect(bind)
-
-  #client.clientloop()
