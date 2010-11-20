@@ -4,6 +4,7 @@ eventlet.monkey_patch()
 from zombie import character
 from zombie import net
 from zombie import shared
+from zombie import util
 from zombie.ui import text
 
 
@@ -16,5 +17,12 @@ if __name__ == '__main__':
 
   
   ui = text.TextUi(termie, bind)
-  ui.run()
+  ui.init()
+  
+  ui.handle_input('connect %s' % bind).wait()
+  rv = ui.handle_input('default_location').wait()
+  default_location = util.deserialize(rv['location'])
+  ui.handle_input('join %s' % str(default_location['control_address'])).wait()
+  
+  shared.pool.spawn(ui.input_loop)
   shared.pool.waitall()

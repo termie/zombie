@@ -229,6 +229,9 @@ class Client(object):
         return
       eventlet.sleep(0.1)
 
+  def verify(self, s, sig):
+    return self._server_key.verify(s, sig)
+
   def _wait_for(self, key, ev):
     self._waiters[key] = ev
   
@@ -238,7 +241,7 @@ class Client(object):
       return
     msg, sig = self._csock.recv_multipart()
     logging.debug('ctrl_msg %s', msg)
-    valid = self._server_key.verify(msg, sig)
+    valid = self.verify(msg, sig)
     if not valid:
       return
 
@@ -261,7 +264,7 @@ class Client(object):
     
     msg, sig = self._psock.recv_multipart()
     logging.debug('sub_msg %s', msg)
-    valid = self._server_key.verify(msg, sig)
+    valid = self.verify(msg, sig)
     if not valid:
       return
     
@@ -271,7 +274,4 @@ class Client(object):
 
   def _sign(self, s):
     return self.proxy.dsa_priv.sign(s)
-
-  def _verify(self, s, sig):
-    return self.serverinfo.dsa_pub.verify(s, sig)
 

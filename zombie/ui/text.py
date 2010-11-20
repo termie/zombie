@@ -31,8 +31,9 @@ class TextUi(object):
     atexit.register(readline.write_history_file, '.zombiehist')
 
   def _init_cmds(self):
-    self._cmds['whoami'] = self._cmd_whoami
+    self._cmds['connect'] = self._cmd_connect
     self._cmds['join'] = self._cmd_join
+    self._cmds['whoami'] = self._cmd_whoami
 
   def _cmd_whoami(self, cmd, args):
     pprint.pprint(self.character.to_dict())
@@ -53,17 +54,21 @@ class TextUi(object):
   def _cmd_nop(self):
     return None
 
-  def run(self):
-    self._setup_readline()
-    self._init_cmds()
-    
+  def _cmd_connect(self, cmd, args):
+    if self.wclient:
+      self.wclient.rpc('leave')
+      self.wclient.close()
+      self.wclient = None
+
     self.wclient = net.Client(self.character)
     self.wclient.connect_control(self.waddress)
     self.wclient.connect_pubsub()
-
     shared.pool.spawn_n(self.wclient.control_loop)
     shared.pool.spawn_n(self.wclient.pubsub_loop)
-    shared.pool.spawn(self.input_loop)
+
+  def init(self):
+    self._setup_readline()
+    self._init_cmds()
 
   def input_loop(self):
       while True:
