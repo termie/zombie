@@ -11,11 +11,9 @@ from zombie.ui import text
 if __name__ == '__main__':
   bind = 'ipc:///tmp/foo'
   
-
   termie = character.Character.load('termie')
   termie.init()
 
-  
   ui = text.TextUi(termie, bind)
   ui.init()
   
@@ -23,6 +21,7 @@ if __name__ == '__main__':
   rv = ui.handle_input('default_location').wait()
   default_location = util.deserialize(rv['location'])
   ui.handle_input('join %s' % str(default_location['control_address'])).wait()
+  ui.handle_input('look').wait()
   
   shared.pool.spawn(ui.input_loop)
   shared.pool.waitall()

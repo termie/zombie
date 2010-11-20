@@ -79,7 +79,7 @@ class Server(object):
           return self._cmd_subscribe_start(ctx, parsed)
         return self.proxy.handle(ctx, parsed, msg, sig)
       except Exception:
-        pass
+        logging.exception('in handling')
     
     # if we didn't have a session or we couldn't decrypt it this is probably
     # a session initiation request

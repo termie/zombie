@@ -26,16 +26,6 @@ def default_location(ctx, parsed):
   ctx.reply(parsed, location=str(loc_ref))
   return True
 
-# Locations get a topic, objects in that location are
-# expected to subscribe to it, events there are published to subscribers
-# each location should act as a singleton
-
-LOCATIONS = {}
-
-def list_all():
-  return util.deserialize(r.get('all'))
-
-
 
 class Location(event.EventEmitter):
   def __init__(self, id, caddress=None, paddress=None, dsa_priv=None,
@@ -54,6 +44,18 @@ class Location(event.EventEmitter):
 
   def init(self):
     pass
+
+  def handle(self, ctx, parsed, msg, sig):
+    ctx['world'] = self
+
+    # mostly for things like authentication
+    hooks.run('pre_message', ctx, parsed, msg, sig)
+
+    # things that trigger on every/any message
+    hooks.run('message', ctx, parsed)
+
+    # whoever is going to handle this command
+    hooks.run('world_' + parsed.get('method'), ctx, parsed)
 
   @classmethod
   def load(cls, location_id):
@@ -74,6 +76,16 @@ class Location(event.EventEmitter):
   def location_loop(self):
     while True:
       eventlet.sleep(1 / self.pulses_per_second)
+
+
+
+
+
+LOCATIONS = {}
+
+
+def list_all():
+  return util.deserialize(r.get('all'))
 
 
 def load_from_file(filename):

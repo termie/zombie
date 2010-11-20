@@ -77,8 +77,7 @@ class World(event.EventEmitter):
     hooks.add('method_spawn', commands.spawn)
 
   def _init_location(self):
-    hooks.add('method_spawn', location.last_seen, 0)
-    hooks.add('method_default_location', location.default_location)
+    hooks.add('world_default_location', location.default_location)
 
     #for loc in location.list_all():
     #  def _load_loc(loc):
@@ -99,7 +98,7 @@ class World(event.EventEmitter):
     hooks.run('message', ctx, parsed)
 
     # whoever is going to handle this command
-    hooks.run('method_' + parsed.get('method'), ctx, parsed)
+    hooks.run('world_' + parsed.get('method'), ctx, parsed)
 
   def world_loop(self):
     while True:
