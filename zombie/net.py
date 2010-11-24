@@ -251,6 +251,7 @@ class Client(object):
       msg = self.proxy.rsa_priv.decrypt(msg)
       
     msg = util.deserialize(msg)
+    logging.debug('ctrl_msg(decrypt): %s', msg)
     if msg['uuid'] in self._waiters:
       self._waiters[msg['uuid']].send(msg)
       del self._waiters[msg['uuid']]

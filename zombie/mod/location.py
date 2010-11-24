@@ -5,6 +5,7 @@ from eventlet.green import zmq
 
 from zombie import crypt
 from zombie import event
+from zombie import hooks
 from zombie import kvs
 from zombie import log as logging
 from zombie import shared
@@ -43,7 +44,19 @@ class Location(event.EventEmitter):
     self.pulses_per_second = 40
 
   def init(self):
-    pass
+    self._init_commands()
+    hooks.add('message', self._route_to_object)
+
+  def _init_commands(self):
+    hooks.add('location_look', self._cmd_look)
+
+  def _cmd_look(self, ctx, parsed):
+    ctx.reply(parsed, **self.to_dict())
+  
+  
+  def _route_to_object(self, ctx, parsed):
+    if parsed['target'] in self._objects:
+      self._objects[parsed['target']].handle(ctx, parsed)
 
   def handle(self, ctx, parsed, msg, sig):
     ctx['world'] = self
@@ -55,7 +68,7 @@ class Location(event.EventEmitter):
     hooks.run('message', ctx, parsed)
 
     # whoever is going to handle this command
-    hooks.run('world_' + parsed.get('method'), ctx, parsed)
+    hooks.run('location_' + parsed.get('method'), ctx, parsed)
 
   @classmethod
   def load(cls, location_id):

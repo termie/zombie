@@ -8,14 +8,20 @@ from zombie import character
 from zombie import log as logging
 from zombie import net
 from zombie import shared
+from zombie.ui import base
 
-class TextUi(object):
-  def __init__(self, character, address):
-    self.character = character
-    self.wclient = None
-    self.lclient = None
-    self.waddress = address
-    self._cmds = {}
+class Output(object):
+  def write(self, text):
+    print text
+
+class TextUi(base.Ui):
+  def __init__(self, character, waddress):
+    super(TextUi, self).__init__(character, waddress)
+    self.main = Output()
+
+  def init(self):
+    super(TextUi, self).init()
+    self._setup_readline()
 
   def _setup_readline(self):
     try:
@@ -31,61 +37,31 @@ class TextUi(object):
     atexit.register(readline.write_history_file, '.zombiehist')
 
   def _init_cmds(self):
-    self._cmds['connect'] = self._cmd_connect
-    self._cmds['join'] = self._cmd_join
+    super(TextUi, self)._init_cmds()
     self._cmds['whoami'] = self._cmd_whoami
-
-  def _cmd_whoami(self, cmd, args):
-    pprint.pprint(self.character.to_dict())
-
-  def _cmd_join(self, cmd, args):
-    if self.lclient:
-      self.lclient.rpc('leave')
-      self.lclient.close()
-      self.lclient = None
-
-    self.lclient = net.Client(self.character)
-    self.lclient.connect_control(args)
-    self.lclient.connect_pubsub()
-
-    shared.pool.spawn_n(self.lclient.control_loop)
-    shared.pool.spawn_n(self.lclient.pubsub_loop)
-
-  def _cmd_nop(self):
-    return None
-
-  def _cmd_connect(self, cmd, args):
-    if self.wclient:
-      self.wclient.rpc('leave')
-      self.wclient.close()
-      self.wclient = None
-
-    self.wclient = net.Client(self.character)
-    self.wclient.connect_control(self.waddress)
-    self.wclient.connect_pubsub()
-    shared.pool.spawn_n(self.wclient.control_loop)
-    shared.pool.spawn_n(self.wclient.pubsub_loop)
-
-  def init(self):
-    self._setup_readline()
-    self._init_cmds()
+    self._cmds['look'] = self._cmd_look
 
   def input_loop(self):
       while True:
         data = raw_input()
         rv = self.handle_input(data)
         result = rv.wait()
-        if result:
-          pprint.pprint(result)
+        #if result:
+        #  self.main.write(pprint.pformat(result))
         eventlet.sleep(0.1)
 
-  def handle_input(self, data):
-    cmd, sep, rest = data.partition(' ')
-    if not cmd.strip():
-      return shared.pool.spawn(self._cmd_nop)
-    if cmd in self._cmds:
-      return shared.pool.spawn(self._cmds[cmd], cmd, rest)
-    if self.lclient:
-      return shared.pool.spawn(self.lclient.rpc, cmd, args=rest)
-    else:
-      return shared.pool.spawn(self.wclient.rpc, cmd, args=rest)
+  def _cmd_whoami(self, cmd, args):
+    self.main.write(pprint.pformat(self.character.to_dict()))
+
+  def _cmd_join(self, cmd, args):
+    super(TextUi, self)._cmd_join(cmd, args)
+    self._cmd_look('look', '')
+
+  def _cmd_look(self, cmd, args):
+    rv = self.lclient.rpc(cmd, args=args)
+    self.main.write(pprint.pformat(rv))
+    #if 'name' in rv:
+    #  self.main.write(rv['name'])
+    #if 'description' in rv:
+    #  self.main.write(rv['description'])
+    return rv

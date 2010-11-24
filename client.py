@@ -6,6 +6,7 @@ from zombie import net
 from zombie import shared
 from zombie import util
 from zombie.ui import text
+from zombie.ui import websocket
 
 
 if __name__ == '__main__':
@@ -14,6 +15,7 @@ if __name__ == '__main__':
   termie = character.Character.load('termie')
   termie.init()
 
+  #ui = websocket.WebSocketUi(termie, bind)
   ui = text.TextUi(termie, bind)
   ui.init()
   
@@ -21,7 +23,6 @@ if __name__ == '__main__':
   rv = ui.handle_input('default_location').wait()
   default_location = util.deserialize(rv['location'])
   ui.handle_input('join %s' % str(default_location['control_address'])).wait()
-  ui.handle_input('look').wait()
   
   shared.pool.spawn(ui.input_loop)
   shared.pool.waitall()
