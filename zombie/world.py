@@ -4,6 +4,7 @@ from zombie import crypt
 from zombie import event
 from zombie import hooks
 from zombie import net
+from zombie import node
 from zombie import shared
 from zombie.mod import accounts
 from zombie.mod import commands
@@ -14,13 +15,14 @@ class World(event.EventEmitter):
   def __init__(self, name, rsa_priv=None, rsa_pub=None, dsa_priv=None,
                dsa_pub=None, *args, **kw):
     super(World, self).__init__(*args, **kw)
+    self.id = name
     self.name = name
     self.rsa_priv = rsa_priv
     self.rsa_pub = rsa_pub
     self.dsa_priv = dsa_priv
     self.dsa_pub = dsa_pub
     self.pulses_per_second = 10
-  
+
   @classmethod
   def generate(cls, name):
     rsa_priv = crypt.PrivateCrypterKey.generate(name)
@@ -88,18 +90,60 @@ class World(event.EventEmitter):
 
     #  shared.pool.spawn(_load_loc, loc)
 
+  def authenticate(self, ctx, parsed, msg, sig):
+    return accounts.authenticate(ctx, parsed, msg, sig)
+
   def handle(self, ctx, parsed, msg, sig):
     ctx['world'] = self
 
-    # mostly for things like authentication
-    hooks.run('pre_message', ctx, parsed, msg, sig)
+    # authenticate
+    authenticated = self.authenticate(ctx, parsed, msg, sig)
+    if not authenticated:
+      raise exception.Error('not authenticated')
 
-    # things that trigger on every/any message
-    hooks.run('message', ctx, parsed)
+    # handle command
+    if parsed.get('method') in self._cmds:
+      self._cmds[parsed.get('method')](ctx, parsed, msg, sig)
 
-    # whoever is going to handle this command
-    hooks.run('world_' + parsed.get('method'), ctx, parsed)
+  def cmd_authorize_token(self, ctx, parsed):
+    """Client is requesting a new auth token
+    
+    Request:
+      {uuid: <uuid>,
+       method: 'auth_token',
+       token: (#({id: <character_id>,
+                  timestamp: <timestamp>,
+                  dsa_pub: <dsa_pub>}),
+               character_sig)
+       }
+    
+    Response:
+      {uuid: <uuid>,
+       auth_token: (#(#({id: <character_id>,
+                         timestamp: <timestamp>,
+                         dsa_pub: <dsa_pub>),
+                        character_sig),
+                      world_sig)
+       }
+    """
 
+    # TODO(termie): verify that timestamp is recent
+    token_str = parsed.get('token')[0]
+    token_sig = parsed.get('token')[1]
+    token = util.loads(token_str)
+
+    verify_key = accounts.verify_key_for(token['id'])
+    if not verify_key.verify(token_str, token_sig):
+      raise exception.Error('invalid sig')
+
+    auth_token_str = util.dumps(parsed.get('token'))
+    auth_token_sig = self.dsa_priv.sign(auth_token_str)
+    return {'auth_token': (auth_token_str, auth_token_sig)}
+    
   def world_loop(self):
     while True:
       eventlet.sleep(1 / self.pulses_per_second)
+
+
+class WorldNode(node.AuthenticatedNode):
+  pass

@@ -1,13 +1,18 @@
 import base64
 import json
 
-
-def deserialize(msg):
-  return json.loads(msg)
+from zombie import exception
 
 
-def serialize(msg):
-  return json.dumps(msg)
+def loads(s):
+  try:
+    return json.loads(s)
+  except Exception as e:
+    raise exception.wrap(e)
+
+
+def dumps(obj):
+  return json.dumps(obj)
 
 
 def b64_encode(s):

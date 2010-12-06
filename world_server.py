@@ -13,22 +13,25 @@ if __name__ == '__main__':
 
 
   logging.info('loading world')
-  foo = world.World.load('foo')
-  foo.init()
+  #foo = world.World.load('foo')
+  #foo.init()
+  foo = world.WorldNode.Load('foo')
 
-  server = net.Server(foo)
+
+  #server = net.Server(foo)
+  server = net.NodeServer(foo)
 
   logging.info('listening on control address')
   server.init_control(cbind)
 
-  logging.info('listening on pubsub address')
-  server.init_pubsub(pbind)
+  #logging.info('listening on pubsub address')
+  #server.init_pubsub(pbind)
   
   # push the loops
   logging.info('starting control loop')
   shared.pool.spawn(server.control_loop)
 
-  logging.info('starting world loop')
-  shared.pool.spawn(foo.world_loop)
+  #logging.info('starting world loop')
+  #shared.pool.spawn(foo.world_loop)
 
   shared.pool.waitall()

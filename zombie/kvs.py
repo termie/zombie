@@ -15,6 +15,9 @@ class Storage(object):
 
 default = Storage()
 
+def global_prefix(prefix):
+  global default
+  default = Storage(prefix)
 
 def get(key):
   return default.get(key)

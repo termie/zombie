@@ -53,7 +53,6 @@ class Location(event.EventEmitter):
   def _cmd_look(self, ctx, parsed):
     ctx.reply(parsed, **self.to_dict())
   
-  
   def _route_to_object(self, ctx, parsed):
     if parsed['target'] in self._objects:
       self._objects[parsed['target']].handle(ctx, parsed)

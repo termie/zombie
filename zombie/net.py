@@ -68,28 +68,36 @@ class Server(object):
     except Exception:
       session_key = None
     
-    if session_key:
-      logging.info('session key found')
-      try:
-        decrypted = session_key.decrypt(msg)
-        ctx['session_key'] = session_key
-        parsed = util.deserialize(decrypted)
-        logging.debug('parsed: %s', parsed)
-        if parsed.get('method') == 'subscribe_start':
-          return self._cmd_subscribe_start(ctx, parsed)
-        return self.proxy.handle(ctx, parsed, msg, sig)
-      except Exception:
-        logging.exception('in handling')
-    
-    # if we didn't have a session or we couldn't decrypt it this is probably
-    # a session initiation request
-    try:
+    if not session_key:
       parsed = util.deserialize(msg)
       logging.debug('parsed (unencrypted): %s', parsed)
-      if parsed.get('method') == 'session_start':
-        self._cmd_session_start(ctx, parsed)
-    except Exception:
-      pass
+      if parsed.get('method') != 'session_start':
+        raise exception.Error('no session key found')
+      return self._cmd_session_start(ctx, parsed)
+
+    logging.info('session key found')
+    try:
+      decrypted = session_key.decrypt(msg)
+    except Exception as e:
+      raise exception.Error('invalid session')
+    
+    ctx['session_key'] = session_key
+
+    try:
+      parsed = util.deserialize(decrypted)
+    except Exception as e:
+      raise exception.Error('no message found')
+  
+    logging.debug('parsed: %s', parsed)
+    if parsed.get('method') == 'subscribe_start':
+      if self.proxy.authenticate(ctx, parsed, msg, sig):
+        return self._cmd_subscribe_start(ctx, parsed)
+
+    try:
+      return self.proxy.handle(ctx, parsed, msg, sig)
+    except Exception as e:
+      logging.exception('in proxy.handle')
+      raise exception.Error('unexpected error')
 
   def _cmd_dsa_pub(self, ctx):
     logging.debug('DSA_PUB')
@@ -126,6 +134,48 @@ class Server(object):
     return self.proxy.dsa_priv.sign(s)
 
 
+class NodeServer(object):
+  """Servers handle normal connections and publishing connections."""
+
+  def __init__(self, node):
+    self.node = node
+    self._psock = None
+    self._paddress = None
+    self._csock = None
+    self._caddress = None
+
+  def init_control(self, address):
+    """Set up the control socket."""
+    sock = shared.zctx.socket(zmq.XREP)
+    sock.bind(address)
+    self._caddress = address
+    self._csock = sock
+
+  def control_loop(self):
+    while True:
+      msg_parts = self._csock.recv_multipart()
+      ident = msg_parts.pop(0)
+      ident_b64 = util.b64_encode(ident)
+      c = context.Context(ident=ident,
+                          client_id=ident_b64,
+                          sock=self._csock)
+      rv = shared.pool.spawn(self._handle_control, c, msg_parts)
+      eventlet.sleep(0.1)
+
+  def _handle_control(self, ctx, msg_parts):
+    logging.info('routing: %s, %s', *msg_parts)
+
+    msg, sig = msg_parts
+
+    # parse the message if we can
+    try:
+      parsed = util.loads(msg)
+    except Exception:
+      parsed = {}
+
+    self.node.handle(ctx, parsed, msg, sig)
+  
+
 class Client(object):
   def __init__(self, proxy):
     self._clooping = False
@@ -149,10 +199,10 @@ class Client(object):
     # Get the server's signing key to verify everything else
     # TODO(termie): obviously we would expect to have this on file already
     #               if we trusted the server
-    sock.send_multipart(['dsa_pub', self._sign('dsa_pub')])
-    dsa_pub, sig = sock.recv_multipart()
-    dsa_pub_key = crypt.PublicVerifierKey.from_key(address, dsa_pub)
-    self._server_key = dsa_pub_key
+    #sock.send_multipart(['dsa_pub', self._sign('dsa_pub')])
+    #dsa_pub, sig = sock.recv_multipart()
+    #dsa_pub_key = crypt.PublicVerifierKey.from_key(address, dsa_pub)
+    #self._server_key = dsa_pub_key
 
     # Start our session
     rv = self.rpc('session_start', rsa_pub=str(self.proxy.rsa_pub), uuid=0)
@@ -192,7 +242,7 @@ class Client(object):
 
   def sign_and_send(self, msg):
     msg['self'] = self.proxy.name
-    msg = util.serialize(msg)
+    msg = util.dumps(msg)
     logging.debug('sending: %s', msg)
     if self._session_key:
       msg = self._session_key.encrypt(msg)
@@ -250,7 +300,7 @@ class Client(object):
     else:
       msg = self.proxy.rsa_priv.decrypt(msg)
       
-    msg = util.deserialize(msg)
+    msg = util.loads(msg)
     logging.debug('ctrl_msg(decrypt): %s', msg)
     if msg['uuid'] in self._waiters:
       self._waiters[msg['uuid']].send(msg)
@@ -270,7 +320,7 @@ class Client(object):
       return
     
     msg = self._subscribe_key.decrypt(msg)
-    msg = util.deserialize(msg)
+    msg = util.loads(msg)
     return msg
 
   def _sign(self, s):

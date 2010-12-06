@@ -1,6 +1,6 @@
 from zombie import crypt
 from zombie import hooks
-from zombie import objects
+from zombie import node
 from zombie import util
 
 
@@ -64,12 +64,7 @@ class Character(object):
   def __str__(self):
     return util.serialize(self.to_dict())
 
-class CharacterObject(objects.ActiveObject):
-  def __init__(self, ctx, dsa_pub):
-    pass
 
-  def located(self, location):
-    # on the new located event the following should occur:
-    # - acquire location session key
-    # - subscribe to location's PUB feed
-    ctx.event('located', str(location))
+
+class CharacterNode(node.SecureNode):
+  pass

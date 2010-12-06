@@ -16,6 +16,10 @@ def auth_required(f):
   _wrapped.func_name = f.func_name
   return _wrapped
 
+def verify_key_for(who):
+  verify_key = crypt.PublicVerifierKey.load('dsa_pub_' + who)
+  return verify_key
+
 
 def authenticate(ctx, parsed, msg, sig):
   who = parsed.get('self')
