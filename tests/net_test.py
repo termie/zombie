@@ -1,11 +1,9 @@
-import unittest
-
-
 from zombie import character
 from zombie import net
 from zombie import shared
 from zombie import test
 from zombie import world
+
 
 class NetTestCase(test.TestCase):
   def test_basic(self):
@@ -18,5 +16,7 @@ class NetTestCase(test.TestCase):
     server = net.NodeServer(the_world)
     server.init_control(world_address)
     wloop = self.spawn(server.control_loop)
+
     client = net.NodeClient(the_char)
     client.connect_control(world_address, world_id)
+    wloop.wait()

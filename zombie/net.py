@@ -163,7 +163,7 @@ class NodeServer(object):
       eventlet.sleep(0.1)
 
   def _handle_control(self, ctx, msg_parts):
-    logging.info('routing: %s, %s', *msg_parts)
+    logging.info('server routing: %s, %s', *msg_parts)
 
     msg, sig = msg_parts
 
@@ -240,7 +240,8 @@ class NodeClient(object):
       while not ev.ready():
         self.control_loop(once=True)
 
-    shared.pool.spawn_n(_forceloop)
+    loop = shared.pool.spawn(_forceloop)
+    loop.wait()
     rv = ev.wait()
     logging.debug('got response for %s', method)
     return rv
@@ -248,10 +249,11 @@ class NodeClient(object):
   def sign_and_send(self, msg):
     msg['self'] = self.node.name
     msg = util.dumps(msg)
-    logging.debug('sending: %s', msg)
+    logging.debug('client sending (raw): %s', msg)
     if self._session_key:
       msg = self._session_key.encrypt(msg)
     sig = self._sign(msg)
+    logging.debug('client sending (signed): %s, %s', msg, sig)
     return self._csock.send_multipart([msg, sig])
 
   def control_loop(self, once=False):
@@ -299,6 +301,7 @@ class NodeClient(object):
     logging.debug('ctrl_msg %s', msg)
     valid = self.verify(msg, sig)
     if not valid:
+      logging.debug('invalid sig (%s): %s', sig, msg)
       return
 
     if self._session_key:

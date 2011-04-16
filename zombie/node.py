@@ -1,3 +1,5 @@
+import logging
+
 from zombie import crypt
 from zombie import event
 from zombie import kvs
@@ -48,6 +50,7 @@ class Node(event.EventEmitter):
 
   @classmethod
   def FromDict(cls, d):
+    logging.debug('d: %s', str(d))
     return cls(**d)
 
   def sign(self, s):
@@ -82,8 +85,8 @@ class Node(event.EventEmitter):
     return self
 
   def to_dict(self):
-    out = dict(id=self.id,
-               name=self.name)
+    out = {'id': self.id,
+           'name': self.name}
     if self.signed_rsa_pub:
       out['signed_rsa_pub'] = self.signed_rsa_pub
     if self.signed_dsa_pub:

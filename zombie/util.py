@@ -6,7 +6,8 @@ from zombie import exception
 
 def loads(s):
   try:
-    return json.loads(s)
+    rv = json.loads(s)
+    return dict((str(k), v) for k, v in rv.iteritems())
   except Exception as e:
     raise exception.wrap(e)
 

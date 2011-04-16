@@ -5,7 +5,6 @@ import unittest
 import sys
 
 import gflags
-
 from nose import config
 from nose import result
 from nose import core
@@ -20,6 +19,8 @@ from zombie import world
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean('fast_tests', True,
                       'only create new keys if they do not exist')
+gflags.DEFINE_boolean('pdb', False,
+                      'drop into pdb on errors (nose flag)')
 
 
 class TestCase(unittest.TestCase):
@@ -112,6 +113,8 @@ class TestRunner(core.TextTestRunner):
 
 def main():
     argv = FLAGS(sys.argv)
+    if FLAGS.pdb:
+      argv.insert(1, '--pdb')
     c = config.Config(stream=sys.stdout,
                       env=os.environ,
                       verbosity=3,

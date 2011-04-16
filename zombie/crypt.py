@@ -1,3 +1,4 @@
+import logging
 import os
 
 from keyczar import keyczar
@@ -13,16 +14,18 @@ from zombie import kvs
 from zombie import util
 
 
-
 def monkey_patch_keyczar_file_functions():
   keyczar_util.WriteFile = WriteFile
   keyczar_util.ReadFile = ReadFile
 
+
 r = kvs.Storage('keyczar|')
+
 
 def WriteFile(data, loc):
   print 'kvs >', loc
   r.set(loc, data)
+
 
 def ReadFile(loc):
   print 'kvs <', loc
@@ -30,6 +33,7 @@ def ReadFile(loc):
   if rv is None:
     raise Exception()
   return rv
+
 
 monkey_patch_keyczar_file_functions()
 
@@ -84,7 +88,10 @@ class Key(object):
     return self.czar.Encrypt(s)
 
   def decrypt(self, ciphertext):
-    return self.czar.Decrypt(ciphertext)
+    try:
+      return self.czar.Decrypt(ciphertext)
+    except:
+      raise exception.Error('invalid ciphertext: %s', ciphertext)
 
   def __str__(self):
     return str(self.czar.primary_key)

@@ -18,7 +18,7 @@ class World(object):
   def on_join(self, obj):
     # update world state
     self.render_object_at_position(obj['position'], obj)
-  
+
   def on_leave(self, obj):
     self.forget_object(obj)
 

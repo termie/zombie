@@ -1,7 +1,8 @@
 import eventlet
 eventlet.monkey_patch()
 
-from zombie import log as logging
+import logging
+
 from zombie import net
 from zombie import shared
 from zombie.mod import location
@@ -30,4 +31,4 @@ if __name__ == '__main__':
   logging.info('starting location loop')
   shared.pool.spawn(foo.location_loop)
 
-  shared.pool.waitall() 
+  shared.pool.waitall()

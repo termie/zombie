@@ -1,7 +1,6 @@
-import unittest
-
 from zombie import node
 from zombie import test
+
 
 class NodeTestCase(test.TestCase):
   @test.skip_if_fast
@@ -14,7 +13,7 @@ class NodeTestCase(test.TestCase):
     self.assertEqual(str(foo.dsa_priv), str(foo_loaded.dsa_priv))
     self.assertEqual(str(foo.dsa_pub), str(foo_loaded.dsa_pub))
 
-  
+
 
   # generate a world
   # generate a character
