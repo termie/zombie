@@ -71,14 +71,16 @@ def setup_test_fixtures():
   the_world.save()
 
   the_world.sign_node(the_char)
-  the_char.save()
-
   the_char.trust_key(world_id, the_world.dsa_pub)
+  the_world.trust_key(world_id, the_world.dsa_pub)
+  the_char.save()
 
   kvs.global_prefix('test' + 'fast_tests')
   the_world.save()
   the_char.save()
   kvs.global_prefix(db_prefix)
+  the_world.save()
+  the_char.save()
 
 
 class TestResult(result.TextTestResult):

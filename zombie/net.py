@@ -177,7 +177,8 @@ class NodeServer(object):
       ctx['node'] = self.node
       self.node.handle(ctx, parsed, msg, sig)
     except Exception as e:
-      ctx.reply(parsed, error=str(e))
+      logging.exception('yikes!')
+      ctx.reply(parsed, dict(error=str(e)))
 
 
 class NodeClient(object):
@@ -210,8 +211,11 @@ class NodeClient(object):
     #self._server_key = dsa_pub_key
 
     # Start our session
-    rv = self.rpc('session_start', rsa_pub=str(self.node.rsa_pub), uuid=0)
-    self._session_key = crypt.SessionKey.from_key('session', rv['session_key'])
+    rv = self.rpc('session_start',
+                  signed_rsa_pub=self.node.signed_rsa_pub,
+                  uuid=0)
+    session_key = self.node.rsa_priv.decrypt(rv['session_key'])
+    self._session_key = crypt.SessionKey.from_key('session', session_key)
 
   def connect_pubsub(self):
     # We get the subscription address via the main connection
@@ -264,8 +268,8 @@ class NodeClient(object):
       self._clooping = True
       if self._csock:
         msg = self._crecv()
-        if msg:
-          self.node.handle(self, msg)
+        #if msg:
+        #  self.node.handle(self, msg)
       self._clooping = False
       if once:
         return
@@ -306,8 +310,8 @@ class NodeClient(object):
 
     if self._session_key:
       msg = self._session_key.decrypt(msg)
-    else:
-      msg = self.node.rsa_priv.decrypt(msg)
+    #else:
+    #  msg = self.node.rsa_priv.decrypt(msg)
 
     msg = util.loads(msg)
     logging.debug('ctrl_msg(decrypt): %s', msg)

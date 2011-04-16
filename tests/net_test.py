@@ -19,4 +19,4 @@ class NetTestCase(test.TestCase):
 
     client = net.NodeClient(the_char)
     client.connect_control(world_address, world_id)
-    wloop.wait()
+    #wloop.wait()

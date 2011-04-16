@@ -31,7 +31,7 @@ def ReadFile(loc):
   print 'kvs <', loc
   rv = r.get(loc)
   if rv is None:
-    raise Exception()
+    raise Exception('cannot load loc: %s', loc)
   return rv
 
 

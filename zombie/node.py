@@ -171,8 +171,8 @@ class SecureNode(Node):
     encrypter = crypt.PublicEncrypterKey.from_key(ctx['client_id'],
                                                   rsa_pub_s)
 
-    e_session_key = encrypter.encrypt(str(session_key))
-    out = {'session_key': e_session_key}
+    session_key_e = encrypter.encrypt(str(session_key))
+    out = {'session_key': session_key_e}
     ctx.reply(request, out)
 
 
@@ -193,10 +193,10 @@ class AuthenticatedNode(SecureNode):
 
     """
     signed_rsa_pub_s, trusted_id, trusted_sig = request.get('signed_rsa_pub')
-    if not verify_trusted_sig(signed_rsa_pub_s, trusted_id, trusted_sig):
+    if not self.verify_trusted_sig(signed_rsa_pub_s, trusted_id, trusted_sig):
       return
 
-    id, rsa_pub_s = util.loads(signed_rsa_pub_s)
+    #id, rsa_pub_s = util.loads(signed_rsa_pub_s)
     rv = super(AuthenticatedNode, self).do_session_start(
         ctx, request, msg, sig)
     return rv

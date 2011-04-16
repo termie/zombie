@@ -2,6 +2,7 @@ import logging
 
 from zombie import util
 
+
 class Context(dict):
   def __init__(self, *args, **kw):
     dict.__init__(self, *args, **kw)
@@ -9,7 +10,7 @@ class Context(dict):
   def send(self, msg, sig):
     self['sock'].send_multipart([self['ident'], msg, sig])
 
-  def reply(self, parsed, **kw):
+  def reply(self, parsed, kw):
     response = {}
     response.update(kw)
     if 'uuid' in parsed:
