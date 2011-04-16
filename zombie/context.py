@@ -1,4 +1,5 @@
-from zombie import log as logging
+import logging
+
 from zombie import util
 
 class Context(dict):
@@ -13,14 +14,15 @@ class Context(dict):
     response.update(kw)
     if 'uuid' in parsed:
       response['uuid'] = parsed['uuid']
-    encrypted = self['session_key'].encrypt(util.serialize(response))
-    if self['world']:
-      signer = self['world'].dsa_priv
-    elif self['location']:
-      signer = self['location'].dsa_priv
 
-    sig = signer.sign(encrypted)
-    self.send(encrypted, sig)
+    response_s = util.dumps(response)
+    if 'session_key' in self:
+      response_s = self['session_key'].encrypt(response_s)
+
+    signer = self['node'].dsa_priv
+
+    sig = signer.sign(response_s)
+    self.send(response_s, sig)
 
   def error(self, msg):
     if not self['world']:

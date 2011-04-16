@@ -1,11 +1,11 @@
 import atexit
+import logging
 import pprint
 import readline
 
 import eventlet
 
 from zombie import character
-from zombie import log as logging
 from zombie import net
 from zombie import shared
 from zombie.ui import base

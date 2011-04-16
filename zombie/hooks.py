@@ -1,6 +1,8 @@
-from zombie import log as logging
+import logging
+
 
 HOOKS = {}
+
 
 def add(key, f, insert=None):
   h = HOOKS.get(key, [])

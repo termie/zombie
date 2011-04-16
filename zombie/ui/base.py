@@ -1,8 +1,10 @@
 import eventlet
+import logging
 
-from zombie import log as logging
+
 from zombie import net
 from zombie import shared
+
 
 class Ui(object):
   def __init__(self, character, waddress):
@@ -31,7 +33,7 @@ class Ui(object):
 
     shared.pool.spawn_n(self.lclient.control_loop)
     shared.pool.spawn_n(self.lclient.pubsub_loop)
-  
+
     #self._cmd_look('look', '')
 
   def _cmd_nop(self):

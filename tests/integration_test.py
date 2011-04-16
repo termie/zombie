@@ -5,6 +5,6 @@ from zombie import test
 from zombie import world
 
 
-class IntegrationTestCase(test.BaseTestCase):
+class IntegrationTestCase(test.TestCase):
   def test_basic(self):
     pass

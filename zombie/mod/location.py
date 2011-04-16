@@ -1,4 +1,5 @@
 import json
+import logging
 
 import eventlet
 from eventlet.green import zmq
@@ -7,12 +8,13 @@ from zombie import crypt
 from zombie import event
 from zombie import hooks
 from zombie import kvs
-from zombie import log as logging
 from zombie import shared
 from zombie import util
 from zombie.mod import accounts
 
+
 r = kvs.Storage('locations_')
+
 
 @accounts.auth_required
 def last_seen(ctx, parsed):
@@ -52,7 +54,7 @@ class Location(event.EventEmitter):
 
   def _cmd_look(self, ctx, parsed):
     ctx.reply(parsed, **self.to_dict())
-  
+
   def _route_to_object(self, ctx, parsed):
     if parsed['target'] in self._objects:
       self._objects[parsed['target']].handle(ctx, parsed)
@@ -81,16 +83,13 @@ class Location(event.EventEmitter):
 
   def to_dict(self):
     return {'id': self.id, 'control_address': self.caddress}
-  
+
   def __str__(self):
     return util.serialize(self.to_dict())
-  
+
   def location_loop(self):
     while True:
       eventlet.sleep(1 / self.pulses_per_second)
-
-
-
 
 
 LOCATIONS = {}
@@ -123,7 +122,7 @@ def load_from_file(filename):
 
     dsa_priv = crypt.PrivateSignerKey.generate('location_' + loc['id'])
     dsa_pub = crypt.PublicVerifierKey.load('location_' + loc['id'])
-    
+
     loc['dsa_priv'] = str(dsa_priv)
     loc['dsa_pub'] = str(dsa_pub)
     loc['caddress'] = 'ipc:///tmp/' + loc['id']

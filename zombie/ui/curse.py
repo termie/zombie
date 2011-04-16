@@ -1,8 +1,8 @@
 import curses
+import logging
 
 import eventlet
 
-from zombie import log as logging
 from zombie import shared
 from zombie.ui import base
 
@@ -18,7 +18,7 @@ class CursesUi(base.Ui):
 
   def _setup_curses(self):
     curses.wrapper(self._curses_app)
-    
+
   def _curses_app(self, stdscr):
     self.win = stdscr
 

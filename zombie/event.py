@@ -1,4 +1,4 @@
-from zombie import log as logging
+import logging
 
 
 class EventEmitter(object):

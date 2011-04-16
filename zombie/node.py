@@ -1,8 +1,8 @@
-
 from zombie import crypt
 from zombie import event
 from zombie import kvs
 from zombie import util
+
 
 class Node(event.EventEmitter):
   prefix = 'node'
@@ -49,7 +49,7 @@ class Node(event.EventEmitter):
   @classmethod
   def FromDict(cls, d):
     return cls(**d)
-    
+
   def sign(self, s):
     return self.dsa_priv.sign(s)
 
@@ -88,8 +88,8 @@ class Node(event.EventEmitter):
       out['signed_rsa_pub'] = self.signed_rsa_pub
     if self.signed_dsa_pub:
       out['signed_dsa_pub'] = self.signed_dsa_pub
-    return out 
-    
+    return out
+
   def handle(self, ctx, request, msg, sig):
     # This is the lowest level handler, it assumes the request has already
     # been authenticated to whatever level was necessary
@@ -99,7 +99,7 @@ class Node(event.EventEmitter):
   def do_look(self, ctx, request, msg, sig):
     ctx.reply(request, {'node': self.to_dict()})
 
-  
+
 class SecureNode(Node):
   """A SecureNode requires a session before it will allow most methods."""
   def __init__(self, *args, **kw):
@@ -115,7 +115,7 @@ class SecureNode(Node):
       ctx['session_key'] = session_key
     except Exception:
       session_key = None
-    
+
     if not session_key:
       if 'method' in request and request['method'] in self._public:
         return self._public[request['method']](ctx, request, msg, sig)
@@ -136,7 +136,7 @@ class SecureNode(Node):
       {method: 'look',
        uuid: <uuid>
        }
-  
+
     Response:
       {uuid: <uuid>,
        node: {id: <id>,
@@ -148,7 +148,7 @@ class SecureNode(Node):
 
   def do_session_start(self, ctx, request, msg, sig):
     """Start a session.
-    
+
     Request:
       {method: 'session_start',
        signed_rsa_pub: (#(<id>, #(<rsa_pub>)), trusted_id, trusted_sig)
@@ -178,16 +178,16 @@ class AuthenticatedNode(SecureNode):
 
   def do_session_start(self, ctx, request, msg, sig):
     """Start a session if we know who you are.
-    
+
     Request:
       {method: 'session_start',
        signed_rsa_pub: (#(<id>, #(<rsa_pub>)), trusted_id, trusted_sig)
        uuid: <uuid>
        }
-    
+
     Response:
       Same as SecureNode.do_session_start
-    
+
     """
     signed_rsa_pub_s, trusted_id, trusted_sig = request.get('signed_rsa_pub')
     if not verify_trusted_sig(signed_rsa_pub_s, trusted_id, trusted_sig):

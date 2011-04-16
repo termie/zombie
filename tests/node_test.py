@@ -3,7 +3,8 @@ import unittest
 from zombie import node
 from zombie import test
 
-class NodeTestCase(test.BaseTestCase):
+class NodeTestCase(test.TestCase):
+  @test.skip_if_fast
   def test_Generate_and_Load(self):
     foo = node.Node.Generate('foo', 'foo')
     foo.save()

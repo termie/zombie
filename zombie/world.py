@@ -35,7 +35,7 @@ class World(event.EventEmitter):
     rsa_pub = crypt.PublicEncrypterKey.load(name)
     dsa_priv = crypt.PrivateSignerKey.load(name)
     dsa_pub = crypt.PublicVerifierKey.load(name)
-  
+
     return cls(name=name, rsa_priv=rsa_priv, rsa_pub=rsa_pub,
                dsa_priv=dsa_priv, dsa_pub=dsa_pub)
 
@@ -67,14 +67,14 @@ class World(event.EventEmitter):
             #self._init_help,
             #self._init_scripts
             ]
-  
+
   def _init_hooks(self):
     pass
 
   def _init_accounts(self):
     hooks.add('pre_message', accounts.authenticate, 0)
     hooks.add('method_register', accounts.register)
-  
+
   def _init_commands(self):
     hooks.add('method_spawn', commands.spawn)
 
@@ -107,7 +107,7 @@ class World(event.EventEmitter):
 
   def cmd_authorize_token(self, ctx, parsed):
     """Client is requesting a new auth token
-    
+
     Request:
       {uuid: <uuid>,
        method: 'auth_token',
@@ -116,7 +116,7 @@ class World(event.EventEmitter):
                   dsa_pub: <dsa_pub>}),
                character_sig)
        }
-    
+
     Response:
       {uuid: <uuid>,
        auth_token: (#(#({id: <character_id>,
@@ -139,7 +139,7 @@ class World(event.EventEmitter):
     auth_token_str = util.dumps(parsed.get('token'))
     auth_token_sig = self.dsa_priv.sign(auth_token_str)
     return {'auth_token': (auth_token_str, auth_token_sig)}
-    
+
   def world_loop(self):
     while True:
       eventlet.sleep(1 / self.pulses_per_second)

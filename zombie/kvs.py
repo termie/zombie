@@ -7,17 +7,22 @@ class Storage(object):
     self.prefix = prefix
 
   def set(self, key, value):
-    self.r.set(self.prefix + key, value)
+    self.r.set(PREFIX + self.prefix + key, value)
 
   def get(self, key):
-    return self.r.get(self.prefix + key)
+    return self.r.get(PREFIX + self.prefix + key)
 
 
 default = Storage()
 
+
+PREFIX = ''
+
+
 def global_prefix(prefix):
-  global default
-  default = Storage(prefix)
+  global PREFIX
+  PREFIX = prefix
+
 
 def get(key):
   return default.get(key)

@@ -1,3 +1,5 @@
+import os
+
 from keyczar import keyczar
 from keyczar import keyczart
 from keyczar import keydata
@@ -6,19 +8,17 @@ from keyczar import keys
 from keyczar import readers
 from keyczar import util as keyczar_util
 
-import redis
-
 from zombie import exception
+from zombie import kvs
 from zombie import util
 
-import os
 
-  
+
 def monkey_patch_keyczar_file_functions():
   keyczar_util.WriteFile = WriteFile
   keyczar_util.ReadFile = ReadFile
 
-r = redis.Redis()
+r = kvs.Storage('keyczar|')
 
 def WriteFile(data, loc):
   print 'kvs >', loc
@@ -55,7 +55,7 @@ class Key(object):
     kmd = keydata.KeyMetadata(name, cls.purpose, cls.kind)
     keyczar_util.WriteFile(str(kmd), cls.prefix + name + '/meta')
     keyczart.AddKey(cls.prefix + name, keyinfo.PRIMARY)
-    
+
     # if we're asymmetric make a public key also
     if cls.asymmetric:
       keyczart.PubKey(cls.prefix + name, cls.prefix + 'public_' + name)
@@ -73,7 +73,7 @@ class Key(object):
     genczar = keyczar.GenericKeyczar(reader)
     genczar.Write(self.prefix + self.name)
     return self.__class__.load(self.name)
-      
+
   def sign(self, s):
     return self.czar.Sign(s)
 
