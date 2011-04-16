@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import eventlet
 eventlet.monkey_patch()
 
@@ -12,7 +13,7 @@ if __name__ == '__main__':
   cbind = 'ipc:///tmp/foo'
   pbind = 'ipc:///tmp/foopub'
 
-
+  logging.getLogger().setLevel(logging.DEBUG)
   logging.info('loading world')
   #foo = world.World.load('foo')
   #foo.init()

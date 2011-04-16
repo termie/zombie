@@ -27,12 +27,12 @@ class Ui(object):
       self.lclient.close()
       self.lclient = None
 
-    self.lclient = net.Client(self.character)
+    self.lclient = net.NodeClient(self.character)
     self.lclient.connect_control(args)
-    self.lclient.connect_pubsub()
+    #self.lclient.connect_pubsub()
 
     shared.pool.spawn_n(self.lclient.control_loop)
-    shared.pool.spawn_n(self.lclient.pubsub_loop)
+    #shared.pool.spawn_n(self.lclient.pubsub_loop)
 
     #self._cmd_look('look', '')
 
@@ -45,11 +45,12 @@ class Ui(object):
       self.wclient.close()
       self.wclient = None
 
-    self.wclient = net.Client(self.character)
-    self.wclient.connect_control(self.waddress)
-    self.wclient.connect_pubsub()
+    logging.debug('connect args: %s' % args)
+    self.wclient = net.NodeClient(self.character)
+    self.wclient.connect_control(self.waddress, args.split(' ')[1])
+    #self.wclient.connect_pubsub()
     shared.pool.spawn_n(self.wclient.control_loop)
-    shared.pool.spawn_n(self.wclient.pubsub_loop)
+    #shared.pool.spawn_n(self.wclient.pubsub_loop)
 
   def input_loop(self):
     while True:

@@ -10,6 +10,7 @@ from zombie import net
 from zombie import shared
 from zombie.ui import base
 
+
 class Output(object):
   def write(self, text):
     print text
