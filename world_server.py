@@ -2,18 +2,25 @@
 import eventlet
 eventlet.monkey_patch()
 
-import logging
+import sys
 
+import gflags
+
+from zombie import logging
 from zombie import net
 from zombie import shared
 from zombie import world
 
+FLAGS = gflags.FLAGS
+
 
 if __name__ == '__main__':
+  args = FLAGS(sys.argv)
+  logging.setup()
+
   cbind = 'ipc:///tmp/foo'
   pbind = 'ipc:///tmp/foopub'
 
-  logging.getLogger().setLevel(logging.DEBUG)
   logging.info('loading world')
   #foo = world.World.load('foo')
   #foo.init()

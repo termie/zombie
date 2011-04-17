@@ -1,23 +1,28 @@
 #!/usr/bin/env python
-import logging
-import sys
-
 import eventlet
 eventlet.monkey_patch()
 
+import sys
+
+import gflags
+
 from zombie import character
+from zombie import logging
 from zombie import net
 from zombie import shared
 from zombie import util
 from zombie.ui import text
-#from zombie.ui import websocket
 
+
+FLAGS = gflags.FLAGS
 
 
 if __name__ == '__main__':
+  args = FLAGS(sys.argv)
+  logging.setup()
+
   bind = 'ipc:///tmp/foo'
   world_id = 'foo'
-  logging.getLogger().setLevel(logging.DEBUG)
 
   termie = character.CharacterNode.Load('termie')
   #termie.init()

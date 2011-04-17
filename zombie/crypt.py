@@ -11,6 +11,7 @@ from keyczar import util as keyczar_util
 
 from zombie import exception
 from zombie import kvs
+from zombie import logging
 from zombie import util
 
 
@@ -23,12 +24,12 @@ r = kvs.Store('keyczar|')
 
 
 def WriteFile(data, loc):
-  print 'kvs >', loc
+  logging.debug('> %s', loc)
   r.set(loc, data)
 
 
 def ReadFile(loc):
-  print 'kvs <', loc
+  logging.debug('< %s', loc)
   rv = r.get(loc)
   if rv is None:
     raise Exception('cannot load loc: %s', loc)
