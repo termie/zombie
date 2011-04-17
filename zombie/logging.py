@@ -10,6 +10,7 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean('verbose', True,
                       'verbose logging output')
 
+
 def setup():
   if FLAGS.verbose:
     level = logging.DEBUG
