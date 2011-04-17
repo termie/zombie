@@ -13,7 +13,7 @@ from zombie import util
 from zombie.mod import accounts
 
 
-r = kvs.Storage('locations_')
+r = kvs.Store('locations_')
 
 
 @accounts.auth_required

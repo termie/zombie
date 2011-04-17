@@ -40,7 +40,7 @@ class Node(event.EventEmitter):
 
   @classmethod
   def Load(cls, id, load_keys=True):
-    r = kvs.Storage(cls.prefix)
+    r = kvs.Store(cls.prefix)
     d = util.loads(r.get(id))
     d['rsa_priv'] = crypt.PrivateCrypterKey.load(id)
     d['rsa_pub'] = crypt.PublicEncrypterKey.load(id)
@@ -75,7 +75,7 @@ class Node(event.EventEmitter):
     return False
 
   def save(self):
-    r = kvs.Storage(self.prefix)
+    r = kvs.Store(self.prefix)
     d = self.to_dict()
     r.set(self.id, util.dumps(d))
     for keyname in ('rsa_priv', 'rsa_pub', 'dsa_priv', 'dsa_pub'):

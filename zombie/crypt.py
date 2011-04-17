@@ -19,7 +19,7 @@ def monkey_patch_keyczar_file_functions():
   keyczar_util.ReadFile = ReadFile
 
 
-r = kvs.Storage('keyczar|')
+r = kvs.Store('keyczar|')
 
 
 def WriteFile(data, loc):

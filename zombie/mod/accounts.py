@@ -8,7 +8,7 @@ from zombie import kvs
 from zombie import util
 
 
-r = kvs.Storage('accounts_')
+r = kvs.Store('accounts_')
 
 
 def auth_required(f):

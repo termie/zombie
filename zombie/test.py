@@ -53,12 +53,12 @@ def setup_test_fixtures():
 
   # A bit of a hack to copy existing keys around
   if FLAGS.fast_tests:
-    kvs.global_prefix('test' + 'fast_tests')
+    FLAGS.kvs_prefix = 'test' + 'fast_tests'
     try:
       the_world = world.WorldNode.Load(world_id)
       the_char = world.WorldNode.Load(char_id)
 
-      kvs.global_prefix(db_prefix)
+      FLAGS.kvs_prefix = db_prefix
       the_char.trust_key(world_id, the_world.dsa_pub)
       the_world.trust_key(world_id, the_world.dsa_pub)
       the_world.save()
@@ -67,7 +67,7 @@ def setup_test_fixtures():
     except Exception:
       pass
 
-  kvs.global_prefix(db_prefix)
+  FLAGS.kvs_prefix = db_prefix
   the_world = world.WorldNode.Generate(world_id, world_id)
   the_char = character.CharacterNode.Generate(char_id, char_id)
   the_world.save()
@@ -78,12 +78,12 @@ def setup_test_fixtures():
   the_char.save()
   the_char.save()
 
-  kvs.global_prefix('test' + 'fast_tests')
+  FLAGS.kvs_prefix = 'test' + 'fast_tests'
   the_char.trust_key(world_id, the_world.dsa_pub)
   the_world.trust_key(world_id, the_world.dsa_pub)
   the_world.save()
   the_char.save()
-  kvs.global_prefix(db_prefix)
+  FLAGS.kvs_prefix = db_prefix
 
 
 class TestResult(result.TextTestResult):
