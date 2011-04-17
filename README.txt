@@ -1,19 +1,44 @@
 
+OMFGWTF Is Going On Here
+========================
+
+Things are still pretty raw, using this file to keep track of ideas and whatnot.
+
+Stuff is starting to stabilize a bit so will begin documentation pretty soon.
+
+
+Getting Started
+===============
+
+you'll need to make a world and a character for that world first.
+
+./tools/generate_world.py foo
+./tools/generate_character.py termie foo
+
+From there you'll be able to run world_server and client.
+
+./world_server.py
+./client.py
+
+They are both extremely chatty right now.
+
+The client is using TextUi which is a not very advanced interface... basically
+it lets you type stuff in and send that to the server, the first word is the
+command and the rest of the words are the arguments. Some commands are
+intercepted by the UI and result in multiple or alternate commands.
+
+
+
+Thoughts
+========
+
+
 
 A World is like a perspective, it provides you with a startling Location and signs the exits for all locations. Locations can be hosted by third parties but to be part of a world they must be signed by that world.
 
 Most connections consist of a control connection and a pubsub connection.
 
 
-Server(World_or_Location):
-  public:
-    session_start(rsa_pub)
-      # verify with dsa_pub that is on file
-      -> {session_key}
-
-  protected:
-    subscribe_start()
-      -> {pubsub_address, pubsub_key}
 
 
 
