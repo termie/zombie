@@ -46,6 +46,11 @@ class CursesUi(base.Ui):
     self.win.refresh()
     self.replace(REALLY_BIG_STRING)
 
+  def topbar(self, text):
+    self.topbar.clear()
+    self.topbar.addnstr(0, 0, text, self.max_x)
+    self.topbar.refresh()
+
   def replace(self, text):
     """Replace the main area with the text."""
     self.main.clear()
@@ -88,3 +93,4 @@ class CursesUi(base.Ui):
   def _cmd_connect(self, cmd, args):
     super(CursesUi, self)._cmd_connect(cmd, args)
     self.append('Connected to %s' % args)
+    self.topbar('(%s)' % args)
