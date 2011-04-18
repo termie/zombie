@@ -42,13 +42,14 @@ class CursesUi(base.Ui):
     self.topbar = self.win.subwin(1, self.max_x, 0, 0)
     self.main = self.win.subwin(self.max_y - 4, self.max_x, 2, 0)
     self.main_y, self.main_x = self.main.getmaxyx()
+    self.top('Their Tanks And Their Guns')
     self.draw_sections()
     self.win.refresh()
     self.replace(REALLY_BIG_STRING)
 
-  def topbar(self, text):
+  def top(self, text):
     self.topbar.clear()
-    self.topbar.addnstr(0, 0, text, self.max_x)
+    self.topbar.addstr(0, 0, text)
     self.topbar.refresh()
 
   def replace(self, text):
@@ -93,4 +94,4 @@ class CursesUi(base.Ui):
   def _cmd_connect(self, cmd, args):
     super(CursesUi, self)._cmd_connect(cmd, args)
     self.append('Connected to %s' % args)
-    self.topbar('(%s)' % args)
+    self.top('(%s)' % args.strip())
