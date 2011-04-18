@@ -67,7 +67,6 @@ class CursesUi(base.Ui):
     self.main.clrtoeol()
     self.main.addnstr(self.main_y - 1, 0, text, self.main_x)
 
-
   def draw_sections(self):
     """Redraw the appropriate screen sections."""
     self.win.hline(1, 0, curses.ACS_HLINE, self.max_x)
@@ -81,28 +80,11 @@ class CursesUi(base.Ui):
   def input_loop(self):
     while True:
       data = self.textbox.edit()
-      self.append(data)
+      self.handle_input(data)
       self.textwin.clear()
       self.textwin.refresh()
-      #self.handle_input(data)
-      #self.win.move(2, 0)
-      #self.win.deleteln()
-      #self.win.insertln()
-      #self.win.insstr(2, 0, data)
-      #self.win.move(0, 0)
-      #self.win.clrtobot()
-      #self.win.addstr(0, 0, REALLY_BIG_STRING)
-      #self.win.move(0, 0)
-      #self.win.deleteln()
-      #self.win.move(self.max_y - 3, 0)
-      #self.win.clrtoeol()
-      #self.win.addstr(self.max_y - 3, 0, "Hey everybody")
-
-      #self.win.hline(self.max_y - 2, 0, curses.ACS_HLINE, self.max_x)
-      #self.textwin.clear()
-      #self.win.refresh()
-      #data = self.win.getch()
-      #print self.textbox.edit()
-      #self.textbox.do_command(data)
-      #print data
       eventlet.sleep(0.1)
+
+  def _cmd_connect(self, cmd, args):
+    super(CursesUi, self)._cmd_connect(cmd, args)
+    self.append('Connected to %s' % args)
