@@ -4,7 +4,7 @@ from zombie import util
 
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_string('kvs_backend', 'zombie.kvs.redis.Store',
+gflags.DEFINE_string('kvs_backend', 'zombie.kvs.sqlite.Store',
                      'backend to use for the kvs')
 gflags.DEFINE_string('kvs_prefix', '',
                      'prefix to use for all keys in the kvs')
