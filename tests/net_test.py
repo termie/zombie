@@ -19,4 +19,6 @@ class NetTestCase(test.TestCase):
 
     client = net.NodeClient(the_char)
     client.connect_control(world_address, world_id)
-    #wloop.wait()
+
+    rv = client.rpc('look')
+    self.assertEqual(rv['node']['name'], 'the_world')

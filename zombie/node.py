@@ -162,8 +162,8 @@ class SecureNode(Node):
       {uuid: <uuid>,
        session_key: rsa_pub.encrypt(#(<session_key>))
        }
-    """
 
+    """
     session_key = crypt.SessionKey.generate(self.id + ctx['client_id'])
     signed_rsa_pub_s, trusted_id, trusted_sig = request.get('signed_rsa_pub')
     id, rsa_pub_s = util.loads(signed_rsa_pub_s)

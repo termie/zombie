@@ -202,14 +202,6 @@ class NodeClient(object):
     self._caddress = address
     self._cname = name
 
-    # Get the server's signing key to verify everything else
-    # TODO(termie): obviously we would expect to have this on file already
-    #               if we trusted the server
-    #sock.send_multipart(['dsa_pub', self._sign('dsa_pub')])
-    #dsa_pub, sig = sock.recv_multipart()
-    #dsa_pub_key = crypt.PublicVerifierKey.from_key(address, dsa_pub)
-    #self._server_key = dsa_pub_key
-
     # Start our session
     rv = self.rpc('session_start',
                   signed_rsa_pub=self.node.signed_rsa_pub,
@@ -268,8 +260,8 @@ class NodeClient(object):
       self._clooping = True
       if self._csock:
         msg = self._crecv()
-        #if msg:
-        #  self.node.handle(self, msg)
+        if msg:
+          self.node.handle(self, msg)
       self._clooping = False
       if once:
         return
@@ -315,9 +307,12 @@ class NodeClient(object):
 
     msg = util.loads(msg)
     logging.debug('ctrl_msg(decrypt): %s', msg)
+    # Check whether this is a response to an rpc, if it is
+    # don't trigger default handlers
     if msg['uuid'] in self._waiters:
       self._waiters[msg['uuid']].send(msg)
       del self._waiters[msg['uuid']]
+      return
 
     return msg
 
