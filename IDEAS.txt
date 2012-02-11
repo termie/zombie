@@ -1,0 +1,90 @@
+
+
+How to give people power:
+
+  - voting on game content, mechanics
+  - priority in some things that involve a rush
+  - specific game events
+  - being able to enter areas that are only open to certain levels
+  - early access to beta stuff
+  - ability to exclude people / members only areas
+  - ability to own land
+  - running bots
+  - action throttling
+  - vote on commits (kinda abstract, possibly game-breaking)
+    - maybe limit it to location-specific stuff only
+    - would still have to pass tests
+    - many changes would be related to special casing groups or individuals,
+      one might expect
+
+
+Scarcity:
+
+  - file-sharing (but probably difficult)
+  - space / logical distance
+    - for example, in a code bazaar situation, projects would want to get
+      near the larger projects so they get more "walk-in" traffic
+  - story specific medallions
+  - access to new areas
+  - time-played, perhaps give small tokens for every hour the person is
+    logged in to the game, some amount of verification probs necessary
+    - rewards uptime
+  - accounts and invites, possibly what.cd-esque
+
+
+Political systems:
+
+  - liquid democracy: allow people to organically proxy their votes on certain
+    subjects to others whom they think are experts
+
+  - demarchy: frequent real-time (or slightly slower) votes on topics,
+    everybody participates in the political structure
+
+    - coders can write agents for themselves to automatically vote certain ways
+      on certain issues
+
+  - some example issues:
+
+    - allow new locations to join the world
+    - allow new players to join the world
+    - allow the creation of new corporations / projects
+    - ban people
+
+
+Chat and channels:
+
+  - piggyback on irc, hopefully
+  - alternatively build similar communication network
+
+
+Bots and Spimes:
+
+  - backendable to an http interface
+  - probably limited in number based on some power rating
+
+
+Ownership and Transfer:
+
+  - objects are given to others by signing them over, ownership chain is
+    visible, though possibly truncate-able
+
+
+Code bazaar land rush:
+
+  - create an area of the game associated with github (possibly others)
+    projects
+  - assign projects some power based on number of watchers/forks,
+  - projects owners are verifiable via github
+  - area assignable for a project based on size, smaller projects can claim
+    that space
+    - possibly smaller projects can share their space with other projects to
+      gain larger / better areas
+    - possibly have better control over the layout and structure of their
+      spaces and the projects within their fold
+
+
+For design purposes:
+
+  - create a tool to visualize location layout
+
+
