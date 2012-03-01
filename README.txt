@@ -14,6 +14,7 @@ you'll need to make a world and a character for that world first.
 
 ./tools/generate_world.py foo
 ./tools/generate_character.py termie foo
+./tools/load_locations.py foo fixtures/locations.json
 
 From there you'll be able to run world_server and client.
 

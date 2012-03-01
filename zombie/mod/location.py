@@ -129,7 +129,7 @@ def load_from_file(filename):
     loc['paddress'] = 'ipc:///tmp/' + loc['id'] + 'pub'
     if loc.get('default', 0):
       logging.info('setting default location: %s', loc['id'])
-      r.set('default', util.serialize(loc))
-    r.set(loc['id'], util.serialize(loc))
+      r.set('default', util.dumps(loc))
+    r.set(loc['id'], util.dumps(loc))
 
-  r.set('all', util.serialize(by_id.keys()))
+  r.set('all', util.dumps(by_id.keys()))

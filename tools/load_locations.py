@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+import logging
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+from zombie import crypt
 from zombie.mod import location
 
 if __name__ == '__main__':
