@@ -42,9 +42,11 @@ def display(connect_sock):
 if __name__ == '__main__':
   args = FLAGS(sys.argv)
 
+  print 'listening on %s' % FLAGS.listen_address
   listen_sock = shared.zctx.socket(zmq.XREP)
   listen_sock.bind(FLAGS.listen_address)
 
+  print 'connecting to %s' % FLAGS.connect_address
   connect_sock = shared.zctx.socket(zmq.XREQ)
   connect_sock.connect(FLAGS.connect_address)
 
