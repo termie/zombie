@@ -4,6 +4,7 @@ import uuid
 import unittest
 import sys
 
+import eventlet
 import gflags
 from nose import config
 from nose import result
@@ -25,14 +26,21 @@ gflags.DEFINE_boolean('pdb', False,
 
 class TestCase(unittest.TestCase):
   def setUp(self):
+    self.monkey_patch_spawn()
     self._spawned = []
 
+  def monkey_patch_spawn(self):
+    self._real_spawn = shared.pool.spawn
+    shared.pool.spawn = self.spawn
+
   def spawn(self, *args, **kw):
-    spawned = shared.pool.spawn(*args, **kw)
+    spawned = self._real_spawn(eventlet.with_timeout, 1, *args, **kw)
+    print 'spawned', spawned
     self._spawned.append(spawned)
     return spawned
 
   def tearDown(self):
+    shared.pool.spawn = self._real_spawn
     for spawned in self._spawned:
       spawned.kill()
 

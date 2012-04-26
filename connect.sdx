@@ -14,7 +14,7 @@ user:LAST_LOC=client.last_location
 client:(LAST_LOC, REJOIN_TOKEN)=world.last_location
 
 user:CONNECTED=client.connect_location(LAST_LOC, REJOIN_TOKEN)
-client:CONNECTED=last_loc.connect(REJOIN_TOKEN)
+client:CONNECTED=last_loc.connect_world(world, REJOIN_TOKEN)
 last_loc:CONNECTED=world.connected(REJOIN_TOKEN)
 [/c]
 
