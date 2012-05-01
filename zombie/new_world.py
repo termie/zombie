@@ -13,6 +13,9 @@ import zmq
 from zombie import shared
 
 
+SLEEP_TIME = 0.0001
+
+
 class ServeContext(dict):
   # ident
   # sock
@@ -21,11 +24,14 @@ class ServeContext(dict):
     self['ident'] = ident
     self['stream'] = stream
 
-  def reply(self, msg):
-    msg['msg_id'] = self['msg_id']
-    msg['cmd'] = 'reply'
-    msg_data = json.dumps(msg)
+  def reply(self, msg, done=True):
+    envelope = {'msg_id': self['msg_id'],
+                'cmd': 'reply',
+                'data': msg}
+    msg_data = json.dumps(envelope)
     self['stream'].sock.send_multipart([self['ident'], msg_data])
+    if done:
+      self.end_reply()
 
   def end_reply(self):
     msg = {'msg_id': self['msg_id'],
@@ -44,11 +50,14 @@ class ConnectContext(dict):
     super(ConnectContext, self).__init__(**json.loads(data))
     self['stream'] = stream
 
-  def reply(self, msg):
-    msg['msg_id'] = self['msg_id']
-    msg['cmd'] = 'reply'
-    msg_data = json.dumps(msg)
+  def reply(self, msg, done=True):
+    envelope = {'msg_id': self['msg_id'],
+                'cmd': 'reply',
+                'data': msg}
+    msg_data = json.dumps(envelope)
     self['stream'].sock.send_multipart([msg_data])
+    if done:
+      self.end_reply()
 
   def end_reply(self):
     msg = {'msg_id': self['msg_id'],
@@ -56,10 +65,10 @@ class ConnectContext(dict):
     msg_data = json.dumps(msg)
     self['stream'].sock.send_multipart([msg_data])
 
-  def send_cmd(self, cmd, data):
+  def send_cmd(self, cmd, data=None):
     msg = {'msg_id': uuid.uuid4().hex,
            'cmd': cmd,
-           'args': data,
+           'args': data or {},
            }
     msg_data = json.dumps(msg)
 
@@ -68,10 +77,8 @@ class ConnectContext(dict):
     self['stream'].sock.send_multipart([msg_data])
     try:
       while True:
-        print "momomomo"
-        eventlet.sleep(0.1)
+        eventlet.sleep(SLEEP_TIME)
         if not q.empty():
-          print "q not empty!"
           rv = q.get(timeout=5)
           if rv == StopIteration:
             break
@@ -95,7 +102,7 @@ class Stream(object):
     self.sock = shared.zctx.socket(zmq.XREP)
     self.sock.bind(address)
     while not self.sock.closed:
-      eventlet.sleep(0.1)
+      eventlet.sleep(SLEEP_TIME)
       try:
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
         ident = parts.pop(0)
@@ -120,10 +127,9 @@ class Stream(object):
 
     shared.pool.spawn(callback, ConnectContext(stream=self, data='{}'))
     while not self.sock.closed:
-      eventlet.sleep(0.1)
+      eventlet.sleep(SLEEP_TIME)
       try:
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
-        print "PARTS", parts
         msg = ConnectContext(stream=self, data=parts[0])
 
         # special case replies
@@ -137,6 +143,9 @@ class Stream(object):
       except zmq.ZMQError as e:
         if e.errno == zmq.EAGAIN:
           pass
+
+  def close(self):
+    self.sock.close()
 
   def register_channel(self, msg_id):
     q = queue.LightQueue()
@@ -167,68 +176,6 @@ class Stream(object):
     """Attempt to call a method on the handler."""
     f = getattr(self.handler, 'cmd_%s' % msg['cmd'])
     f(msg, **dict((str(k), v) for k, v in msg['args'].iteritems()))
-
-
-def serve(address, handler):
-  print 'listening on %s' % address
-  sock = shared.zctx.socket(zmq.XREP)
-  sock.bind(address)
-  try:
-    print 'listening on %s' % address
-    while True:
-      time.sleep(0.1)
-      try:
-        print 'serve_handle'
-        parts = sock.recv_multipart(flags=zmq.NOBLOCK)
-        shared.pool.spawn(handle_cmd, sock, parts, handler)
-      except zmq.ZMQError as e:
-        if e.errno == zmq.EAGAIN:
-          pass
-  except Exception:
-    logging.exception('wowo')
-    sock.close()
-
-
-def connect(address, handler):
-  sock = shared.zctx.socket(zmq.XREQ)
-  sock.connect(address)
-
-  try:
-    print 'connected to %s' % address
-    # handle the notification event synchronously
-    handle_cmd(sock, ['lala', 'connection_started'], handler)
-    while True:
-      if sock.closed:
-        break
-      time.sleep(0.1)
-      try:
-        print 'connect_handle'
-        parts = sock.recv_multipart(flags=zmq.NOBLOCK)
-        print "GOT ONE"
-        shared.pool.spawn(handle_cmd, sock, parts, handler)
-      except zmq.ZMQError as e:
-        if e.errno == zmq.EAGAIN:
-          pass
-  except Exception:
-    logging.exception('lala')
-    sock.close()
-
-
-def invalid_cmd(context, cmd, *msg_parts):
-  context.reply('invalid cmd %s: %s' % (cmd, msg_parts))
-
-
-def handle_cmd(sock, msg_parts, handler):
-  print '<<< %s' % msg_parts
-  ctx = Context(sock=sock, ident=msg_parts.pop(0))
-  cmd = msg_parts.pop(0)
-  #print '<<< %s %s' % (cmd, msg_parts)
-  f = getattr(handler, 'cmd_%s' % cmd, functools.partial(invalid_cmd, cmd))
-  try:
-    f(ctx, *msg_parts)
-  except Exception:
-    sock.close()
-
 
 
 class Keystore(object):
@@ -266,7 +213,7 @@ class World(object):
     self.location_db = location_db
 
   def cmd_lookup_location(self, context, location_id):
-    return context.reply(self.location_db.get(location_id))
+    return context.reply({location_id: self.location_db.get(location_id)})
 
   def cmd_default_location(self, context):
     return self.cmd_lookup_location(context, 'default')

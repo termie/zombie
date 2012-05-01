@@ -6,6 +6,7 @@ from zombie import test
 from zombie import new_world
 import time
 import logging
+import functools
 
 
 location_db = {'default': 'inproc://default_location'}
@@ -18,43 +19,109 @@ WORLD_ADDR = 'inproc://world'
 
 
 class TestHandler(object):
-  def cmd_connection_started(self, context):
-    print 'connecty'
-    context.send('default_location')
-    #raise StopIteration()
+  pass
+
 
 class EchoHandler(object):
   def cmd_echo_and_die(self, context, message):
     context.reply({'message': message})
+    context['stream'].close()
+
+  def cmd_echo_three_and_die(self, context, message):
+    context.reply({'message': message}, False)
+    context.reply({'message': message}, False)
+    context.reply({'message': message}, False)
     context.end_reply()
-    context['stream'].sock.close()
+    context['stream'].close()
 
 
+class BaseTestCase(test.TestCase):
+  def _get_server(self):
+    return new_world.Stream(EchoHandler())
 
-class WorldTestCase(test.TestCase):
-  #def test_world_serve(self):
-  #  w = new_world.World(location_db=location_db)
-  #  k = self.spawn(new_world.serve, WORLD_ADDR, w)
-  #  c = TestHandler()
-  #  self.spawn(new_world.connect, WORLD_ADDR, c)
-  #  shared.pool.waitall()
+  def _get_client(self):
+    return new_world.Stream(TestHandler())
+
+  def call(self, cb):
+    callback_called = [False]
+    s = self._get_server()
+    c = self._get_client()
+
+    @functools.wraps(cb)
+    def _cb(*args, **kw):
+      callback_called[0] = True
+      rv = cb(*args, **kw)
+      s.close()
+      c.close()
+      return rv
+
+    self.spawn(s.serve, WORLD_ADDR)
+    self.spawn(c.connect, WORLD_ADDR, _cb)
+    shared.pool.waitall()
+    self.assert_(callback_called)
+
+
+class WorldTestCase(BaseTestCase):
+  def _get_server(self):
+    return new_world.Stream(new_world.World(location_db=location_db))
+
+  def test_world_default_location(self):
+    def cb(context):
+      r = context.send_cmd('default_location')
+      for result in r:
+        self.assertEqual(result['data']['default'], location_db['default'])
+
+    self.call(cb)
+
+  def test_world_lookup_location(self):
+    def cb(context):
+      r = context.send_cmd('lookup_location', {'location_id': 'default'})
+      for result in r:
+        self.assertEqual(result['data']['default'], location_db['default'])
+
+    self.call(cb)
+
+
+class LocationTestCase(BaseTestCase):
   pass
+
 
 class StreamTestCase(test.TestCase):
   def test_serve(self):
+    callback_called = [False]
+
     s = new_world.Stream(EchoHandler())
     self.spawn(s.serve, WORLD_ADDR)
 
     def cb(context):
+      callback_called[0] = True
       r = context.send_cmd('echo_and_die', {'message': 'foo'})
-      print "asdasd"
       for result in r:
-        print "LALLSDLAS"
-        print result
-      context['stream'].sock.close()
-
+        self.assertEqual(result['data']['message'], 'foo')
+      context['stream'].close()
 
     c = new_world.Stream(TestHandler())
     self.spawn(c.connect, WORLD_ADDR, cb)
-
     shared.pool.waitall()
+    self.assert_(callback_called[0])
+
+  def test_multiple_responses(self):
+    callback_called = [False]
+
+    s = new_world.Stream(EchoHandler())
+    self.spawn(s.serve, WORLD_ADDR)
+
+    def cb(context):
+      callback_called[0] = True
+      r = context.send_cmd('echo_three_and_die', {'message': 'foo'})
+      i = 0
+      for result in r:
+        self.assertEqual(result['data']['message'], 'foo')
+        i += 1
+      self.assertEqual(i, 3)
+      context['stream'].close()
+
+    c = new_world.Stream(TestHandler())
+    self.spawn(c.connect, WORLD_ADDR, cb)
+    shared.pool.waitall()
+    self.assert_(callback_called[0])

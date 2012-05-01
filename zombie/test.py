@@ -35,7 +35,7 @@ class TestCase(unittest.TestCase):
 
   def spawn(self, *args, **kw):
     spawned = self._real_spawn(eventlet.with_timeout, 1, *args, **kw)
-    print 'spawned', spawned
+    logging.debug('spawned %s', args[0])
     self._spawned.append(spawned)
     return spawned
 
