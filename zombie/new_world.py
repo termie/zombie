@@ -93,6 +93,19 @@ class ConnectContext(dict):
 
 
 class Stream(object):
+  """Handles data coming in to a server or from a server.
+
+  The basic operations as a server:
+    - Listen on a given port
+    - On new messages
+      - Create a ServeContext (used by the handler to direct any replies)
+      - Decide what to do with the message based on the command.
+        - Two special cases of command are 'reply' and 'end_reply' which route
+          messages back to the calling function and do what you would expect.
+
+
+  """
+
   def __init__(self, handler):
     self.handler = handler
     self._reply_waiters = {}
@@ -204,9 +217,9 @@ class World(object):
   """Handle the tasks a world must handle. So heavy is this burden.
 
   A world is in charge of a few things:
-    - Providing addresses for locations (lookup_location)
-    - Providing a default location for new users (default_location)
-
+    - (x) Providing addresses for locations (lookup_location)
+    - (x) Providing a default location for new users (default_location)
+    - ( ) Keeping track of the locations of all users (accept_move)
   """
 
   def __init__(self, location_db):
@@ -262,6 +275,10 @@ class Location(object):
 
       signed(old_location, ('teleport', old_location, new_location))
 
+    Another basic case is the user is reconnecting to this location::
+
+      signed({'user': this user, 'last_location': this location})
+
     The new location should probably additionally verify this entry token
     with the world to prevent a user from being in multiple spots.
     """
@@ -281,3 +298,55 @@ class Location(object):
 
   def cmd_look(self, context):
     return context.reply(self.data)
+
+
+class User(object):
+  def __init__(self, username, keys):
+    self.username = username
+
+  def _connect_to_world(self, address):
+    self.world_handler = self
+    world_ev = eventlet.Event()
+
+    self.world_stream = Stream(self.world_handler)
+    self.world_stream.connect(address, world_ev.send)
+    world_context = ev.wait()
+    return world_context
+
+  def _connect_to_location(self, address)
+    self.location_handler = self
+    loc_ev = eventlet.Event()
+
+    self.location_stream = Stream(self.location_handler)
+    self.location_stream.connect(addresss, loc_ev.send)
+    loc_context = loc_ev.wait()
+    return loc_context
+
+  def connect(self, address, cb):
+    """Connect to the world and join last location.
+
+    - Connect to world.
+    - Ask world for last location.
+    - Connect to last location.
+    - Enter last location.
+
+    .. sdx:: reconnect_world
+
+    NOTE(termie): Perhaps this method should be moved to some sort of
+                  user managing class that is part of the UI layer and leave
+                  the User class for managing the state of the user.
+    """
+
+    world_context = self._connect_to_world(address)
+    last_loc = world_context.send_cmd('my_last_location', {}).next()
+
+    loc_context = self._connect_to_location(address)
+    rv = loc_context.send_cmd('enter',
+                              {'valid_entry': last_loc['verification']}).next()
+
+    return (world_context, loc_context)
+
+
+  def connect_location(self, address, cb):
+    self.location_handler = self
+

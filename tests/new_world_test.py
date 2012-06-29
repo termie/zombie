@@ -83,7 +83,21 @@ class WorldTestCase(BaseTestCase):
 
 
 class LocationTestCase(BaseTestCase):
-  pass
+  def test_basic(self):
+    # User connects to world
+    # User is unknown so gets default location
+    # User connects to default location
+    # User joins the default location
+    # User looks and sees the location
+    # User disconnects
+    # User reconnects to world is known so gets last location as default
+    # User connects to a different location
+    # User attempts to join the different location
+    # New location rejects join
+    # User connects to the default location
+    # User joins the default location
+    pass
+
 
 
 class StreamTestCase(test.TestCase):
