@@ -1,0 +1,15 @@
+
+DECISIONS
+- duplicatable items, don't need server checks to validate
+- non-duplicatable items, need server checks to validate
+- item validation based on vector clocks
+- user locations based on locks within the database
+
+
+- economy? political only?
+- clock ticks
+
+late stage:
+  - character creation
+  - dice rolls?
+  - mcp / mccp / mdsp

@@ -237,8 +237,8 @@ class Location(object):
 
   A location is in charge of a few things:
     - Broadcasting events to everybody in the location
-    - Checking whether a user is allowed to enter (enter)
-    - Allowing a user to leave (leave)
+    - Checking whether a user is allowed to enter (join)
+    - Allowing a user to leave (move)
     - Providing information about itself (look)
 
   """
@@ -261,92 +261,148 @@ class Location(object):
     public_key.verify(data, signature)
     return True
 
-  def cmd_enter(self, context, valid_entry):
-    """Decide whether to allow a user to enter. Announce if success.
+  def cmd_join(self, ctx, join_token):
+    """Handle a user trying to join this location.
 
-    In the basic case a user needs to present some sort of validation token,
-    usually from an adjoining location, that proves this user left that
-    location towards this one. Something like::
-
-      signed(old_location, ('leave', old_location, new_location))
-
-    In plausibly more advanced cases (e.g. teleportation), a teleportation
-    credential may be added::
-
-      signed(old_location, ('teleport', old_location, new_location))
-
-    Another basic case is the user is reconnecting to this location::
-
-      signed({'user': this user, 'last_location': this location})
-
-    The new location should probably additionally verify this entry token
-    with the world to prevent a user from being in multiple spots.
+    If the join_token looks good, get the world to update the last location
+    in the db.
     """
-    pass
+    # TODO(termie): verify join token
+    self.world.update_location(join_token)
+    ctx.reply({'result': 'ok'})
 
-  def cmd_leave(self, context, new_location):
-    """Decide whether to allow a user to leave. Announce if success.
+    # Add the user to our local db
+    self.users.add(ctx.username, ctx)
 
-    This is pretty much always successful but possibly some puzzles will want
-    to make this more difficult.
+    # Announce the user's entrance, if applicable.
+    self.broadcast_joined(ctx.username, join_token['from_id'])
 
-    Should provide a valid entry token for the new location.
 
-    In the basic case only allow leaving to adjacent locations.
-    """
-    context.reply((self.data.get('id'), new_location))
 
   def cmd_look(self, context):
     return context.reply(self.data)
 
 
 class User(object):
-  def __init__(self, username, keys):
+  def __init__(self, username):
     self.username = username
 
+
+class Client(object):
+  """Holds on to a user object and uses it to interact with the game.
+
+  This represents the high level interface to interacting with the game
+  while the User is what holds on to state.
+
+  """
+  def __init__(self, user):
+    self.user = user
+    self.world = None
+    self.location = None
+
   def _connect_to_world(self, address):
+    """Establish a connection to the main world.
+
+    After that you'll most likely reconnect to the User's last location.
+    """
     self.world_handler = self
     world_ev = eventlet.Event()
 
     self.world_stream = Stream(self.world_handler)
     self.world_stream.connect(address, world_ev.send)
     world_context = ev.wait()
-    return world_context
+    self.world = WorldClient(self.user, world_context)
+    return self.world
 
-  def _connect_to_location(self, address)
+  def _connect_to_location(self, address):
+    """Establish a connection to a given location.
+
+    After that you'll most likely try to join the location.
+    """
     self.location_handler = self
     loc_ev = eventlet.Event()
 
     self.location_stream = Stream(self.location_handler)
     self.location_stream.connect(addresss, loc_ev.send)
     loc_context = loc_ev.wait()
-    return loc_context
+    self.location = LocationClient(self.user, loc_context)
+    return self.location
 
-  def connect(self, address, cb):
-    """Connect to the world and join last location.
+  def _rejoin_game(self, address):
+    """Go through all the steps to get back into game.
 
-    - Connect to world.
-    - Ask world for last location.
-    - Connect to last location.
-    - Enter last location.
-
-    .. sdx:: reconnect_world
-
-    NOTE(termie): Perhaps this method should be moved to some sort of
-                  user managing class that is part of the UI layer and leave
-                  the User class for managing the state of the user.
+    - Connect to the world.
+    - Request last location.
+    - Connect to last location
+    - Join last location with reconnect token.
     """
+    world = self._connect_to_world(address)
+    last_loc = world.last_location()
+    loc_address = last_loc['address']
+    join_token = last_loc['join_token']
 
-    world_context = self._connect_to_world(address)
-    last_loc = world_context.send_cmd('my_last_location', {}).next()
+    location = self._connect_to_location(loc_address)
+    location.join(join_token)
 
-    loc_context = self._connect_to_location(address)
-    rv = loc_context.send_cmd('enter',
-                              {'valid_entry': last_loc['verification']}).next()
+  def _move_location(self, new_location):
+    """Send the move command to the current location using the new location.
 
-    return (world_context, loc_context)
+    The location will send back a move token for the new location (after
+    getting it signed by the world.)
+
+    After that it will send a disconnect to this client and the client
+    will connect to the new location and attempt to join.
+    """
+    move_rv = self.location.move(new_location)
+    address = move_rv['address']
+    join_token = move_rv['join_token']
+    self.location.disconnect()
+
+    location = self._connect_to_location(address)
+    location.join(join_token)
 
 
-  def connect_location(self, address, cb):
-    self.location_handler = self
+class LocationClient(object):
+  """Interface to the various commands we might send to a location."""
+
+  def __init__(self, user, ctx):
+    self.ctx = ctx
+    self.user = user
+
+  def disconnect(self):
+    self.ctx.stream.close()
+
+  def join(self, join_token):
+    """Attempt the join the location."""
+    rv = self.ctx.send_cmd('join', data={'join_token': join_token})
+    success = rv.next()
+    return success
+
+  def move(self, new_location_id):
+    """Send the move command.
+
+    Returns:
+      {'address': <new_location_address>
+       'join_token': {'user': <username>,
+                      'location_id': <new location_id>,
+                      'from_id': <last_location_id>}
+        }
+    """
+    rv = self.ctx.send_cmd('move', data={'new_location': new_location_id})
+    move_rv = rv.next()
+    return move_rv
+
+
+class WorldClient(object):
+  """Interface to the various commands we might send to a world."""
+
+  def __init__(self, user, ctx):
+    self.ctx = ctx
+    self.user = user
+
+  def last_location(self):
+    """Request the current user's last location."""
+    rv = self.ctx.send_cmd('last_location', data={'user': self.user.username})
+    last_loc = rv.next()
+    return last_loc
 
