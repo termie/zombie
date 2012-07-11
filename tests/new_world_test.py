@@ -211,12 +211,14 @@ class BasicTestCase(test.TestCase):
     loc_a_stream = new_world.Stream(self.loc_a)
     self.spawn(loc_a_stream.serve,
                self.fixture_world['locations']['loc_a']['address'])
+    self.loc_a._connect_to_world(self.fixture_world['address'])
     return loc_a_stream
 
   def spawn_loc_b(self):
     loc_b_stream = new_world.Stream(self.loc_b)
     self.spawn(loc_b_stream.serve,
                self.fixture_world['locations']['loc_b']['address'])
+    self.loc_b._connect_to_world(self.fixture_world['address'])
     return loc_b_stream
 
   def test_it(self):

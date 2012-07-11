@@ -287,7 +287,6 @@ class Kvs(dict):
     return self.deserialize(rv)
 
 
-
 class WorldUserDatabase(Kvs):
   """Interface for accessing user data."""
   deserialize = model.User.from_dict
@@ -318,6 +317,21 @@ class Location(object):
     self.user_db = user_db
     #self.keys = Keystore()
 
+  def _connect_to_world(self, address):
+    """Establish a connection to the main world.
+
+    """
+    self.world_handler = self
+    world_ev = event.Event()
+    self.world_stream = Stream(self.world_handler)
+    shared.pool.spawn(self.world_stream.connect, address, world_ev.send)
+    logging.debug('WAITING')
+    world_context = world_ev.wait()
+    logging.debug('FINSIHED')
+    self.world = LocationWorldClient(self, world_context)
+    return self.world
+
+
   def sign(self, data):
     return (data, 'i_am_a_signature')
 
@@ -339,17 +353,31 @@ class Location(object):
     in the db.
     """
     # TODO(termie): verify join token
-    self.world.update_location(join_token)
+    self.world.update_user_location(join_token)
     ctx.reply({'result': 'ok'})
 
     # Add the user to our local db
-    self.users.add(ctx.username, ctx)
+    #self.users.add(ctx.username, ctx)
 
     # Announce the user's entrance, if applicable.
-    self.broadcast_joined(ctx.username, join_token['from_id'])
+    #self.broadcast_joined(ctx.username, join_token['from_id'])
 
   def cmd_look(self, ctx):
     return ctx.reply(self.data)
+
+
+class LocationWorldClient(object):
+  """Interface to the various commands we might send to a world."""
+
+  def __init__(self, location, ctx):
+    self.ctx = ctx
+    self.location = location
+
+  def update_user_location(self, join_token):
+    """Set the user's last location."""
+    rv = self.ctx.send_cmd('update_user_location',
+                           data={'join_token': join_token})
+    return rv.next()
 
 
 class LocationUserDatabase(Kvs):
