@@ -7,6 +7,7 @@ import time
 import uuid
 
 import eventlet
+from eventlet import event
 from eventlet import queue
 import zmq
 
@@ -14,7 +15,7 @@ from zombie import shared
 from zombie import model
 
 
-SLEEP_TIME = 0.0001
+SLEEP_TIME = 0.1
 
 
 class ServeContext(dict):
@@ -41,6 +42,7 @@ class ServeContext(dict):
     self['stream'].sock.send_multipart([self['ident'], msg_data])
 
   def send(self, msg, *args):
+    logging.debug('SSEND> %s', [msg % args])
     self['stream'].sock.send_multipart([msg % args])
 
 
@@ -90,6 +92,7 @@ class ConnectContext(dict):
     self['stream'].deregister_channel(msg['msg_id'])
 
   def send(self, msg, *args):
+    logging.debug('CSEND> %s', [msg % args])
     self['stream'].sock.send_multipart([msg % args])
 
 
@@ -113,12 +116,14 @@ class Stream(object):
 
   def serve(self, address):
     """Listen on an XREP socket."""
+    logging.debug('SERVE %s', address)
     self.sock = shared.zctx.socket(zmq.XREP)
     self.sock.bind(address)
     while not self.sock.closed:
       eventlet.sleep(SLEEP_TIME)
       try:
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
+        logging.debug('<SRECV %s', parts)
         ident = parts.pop(0)
         msg = ServeContext(stream=self, ident=ident, data=parts[0])
 
@@ -136,6 +141,7 @@ class Stream(object):
 
   def connect(self, address, callback):
     """Connect with an XREQ socket."""
+    logging.debug('CONNECT %s', address)
     self.sock = shared.zctx.socket(zmq.XREQ)
     self.sock.connect(address)
 
@@ -144,6 +150,7 @@ class Stream(object):
       eventlet.sleep(SLEEP_TIME)
       try:
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
+        logging.debug('<CRECV %s', parts)
         msg = ConnectContext(stream=self, data=parts[0])
 
         # special case replies
@@ -342,11 +349,12 @@ class Client(object):
     After that you'll most likely reconnect to the User's last location.
     """
     self.world_handler = self
-    world_ev = eventlet.Event()
-
+    world_ev = event.Event()
     self.world_stream = Stream(self.world_handler)
-    self.world_stream.connect(address, world_ev.send)
-    world_context = ev.wait()
+    shared.pool.spawn(self.world_stream.connect, address, world_ev.send)
+    logging.debug('WAITING')
+    world_context = world_ev.wait()
+    logging.debug('FINSIHED')
     self.world = WorldClient(self.user, world_context)
     return self.world
 
@@ -356,10 +364,10 @@ class Client(object):
     After that you'll most likely try to join the location.
     """
     self.location_handler = self
-    loc_ev = eventlet.Event()
+    loc_ev = event.Event()
 
     self.location_stream = Stream(self.location_handler)
-    self.location_stream.connect(addresss, loc_ev.send)
+    shared.pool.spawn(self.location_stream.connect, addresss, loc_ev.send)
     loc_context = loc_ev.wait()
     self.location = LocationClient(self.user, loc_context)
     return self.location
@@ -373,6 +381,7 @@ class Client(object):
     - Join last location with reconnect token.
     """
     world = self._connect_to_world(address)
+    logging.debug('AFTER CONNECT')
     last_loc = world.last_location()
     loc_address = last_loc['address']
     join_token = last_loc['join_token']

@@ -8,6 +8,7 @@ import time
 import logging
 import functools
 
+from eventlet import debug
 
 location_db = {'default': 'inproc://default_location'}
 user_db = {'asd': 'asda'}
@@ -144,16 +145,16 @@ class StreamTestCase(test.TestCase):
 
 class BasicTestCase(test.TestCase):
   fixture_world = {
-      'address': 'ipc://world',
+      'address': 'ipc:///tmp/world',
       'users': {'bot_1': {'id': 'bot_1',
                           'last_location': 'loc_a'},
                 'bot_2': {'id': 'bot_2',
                           'last_location': 'loc_b'},
                 },
       'locations': {'loc_a': {'id': 'loc_a',
-                              'address': 'ipc://loc_a'},
+                              'address': 'ipc:///tmp/loc_a'},
                     'loc_b': {'id': 'loc_b',
-                              'address': 'ipc://loc_b'},
+                              'address': 'ipc:///tmp/loc_b'},
                     },
       }
 
@@ -202,15 +203,24 @@ class BasicTestCase(test.TestCase):
     self.bot_2 = new_world.User(**fixture)
 
   def spawn_world(self):
-    pass
+    world_stream = new_world.Stream(self.world)
+    self.spawn(world_stream.serve, self.fixture_world['address'])
+    return world_stream
 
   def spawn_loc_a(self):
-    pass
+    loc_a_stream = new_world.Stream(self.loc_a)
+    self.spawn(loc_a_stream.serve,
+               self.fixture_world['locations']['loc_a']['address'])
+    return loc_a_stream
 
   def spawn_loc_b(self):
-    pass
+    loc_b_stream = new_world.Stream(self.loc_b)
+    self.spawn(loc_b_stream.serve,
+               self.fixture_world['locations']['loc_b']['address'])
+    return loc_b_stream
 
   def test_it(self):
+    debug.hub_blocking_detection(True, 0.5)
     world = self.spawn_world()
     loc_a = self.spawn_loc_a()
     loc_b = self.spawn_loc_b()
@@ -220,5 +230,6 @@ class BasicTestCase(test.TestCase):
     cl_1 = new_world.Client(self.bot_1)
     cl_2 = new_world.Client(self.bot_2)
 
-    cl_1._rejoin_game(self.fixture_world['address'])
-    cl_2._rejoin_game(self.fixture_world['address'])
+    self.spawn(cl_1._rejoin_game, self.fixture_world['address'])
+    time.sleep(3)
+    #cl_2._rejoin_game(self.fixture_world['address'])
