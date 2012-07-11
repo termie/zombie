@@ -10,6 +10,7 @@ import functools
 
 
 location_db = {'default': 'inproc://default_location'}
+user_db = {'asd': 'asda'}
 
 default_location = {'id': 'default',
                     'address': 'inproc://default_location',
@@ -63,7 +64,8 @@ class BaseTestCase(test.TestCase):
 
 class WorldTestCase(BaseTestCase):
   def _get_server(self):
-    return new_world.Stream(new_world.World(location_db=location_db))
+    return new_world.Stream(new_world.World(location_db=location_db,
+                                            user_db=user_db))
 
   def test_world_default_location(self):
     def cb(context):
@@ -138,3 +140,75 @@ class StreamTestCase(test.TestCase):
     self.spawn(c.connect, WORLD_ADDR, cb)
     shared.pool.waitall()
     self.assert_(callback_called[0])
+
+
+class BasicTestCase(test.TestCase):
+  fixture_world = {
+      'address': 'ipc://world',
+      'users': {'bot_1': {'id': 'bot_1',
+                          'last_location': 'loc_a'},
+                'bot_2': {'id': 'bot_2',
+                          'last_location': 'loc_b'},
+                },
+      'locations': {'loc_a': {'id': 'loc_a',
+                              'address': 'ipc://loc_a'},
+                    'loc_b': {'id': 'loc_b',
+                              'address': 'ipc://loc_b'},
+                    },
+      }
+
+
+  fixture_loc_a = {
+      'users': [],
+      }
+
+  fixture_loc_b = {
+      'users': [],
+      }
+
+  fixture_bot_1 = {
+      'id': 'bot_1',
+      }
+
+  fixture_bot_2 = {
+      'id': 'bot_2',
+      }
+
+  def setUp(self):
+    self.load_world(self.fixture_world)
+    self.load_loc_a(self.fixture_loc_a)
+    self.load_loc_b(self.fixture_loc_b)
+    self.load_bot_1(self.fixture_bot_1)
+    self.load_bot_2(self.fixture_bot_2)
+
+  def load_world(self, fixture):
+    self.world = new_world.World(
+          location_db=new_world.WorldLocationDatabase(**fixture['locations']),
+          user_db=new_world.WorldUserDatabase(**fixture['users']))
+
+  def load_loc_a(self, fixture):
+    self.loc_a = new_world.Location(
+        user_db=new_world.LocationUserDatabase(**fixture['users']))
+
+  def load_loc_b(self, fixture):
+    self.loc_b = new_world.Location(
+        user_db=new_world.LocationUserDatabase(**fixture['users']))
+
+  def load_bot_1(self, fixture):
+    self.bot_1 = new_world.User(**fixture)
+
+  def load_bot_2(self, fixture):
+    self.bot_2 = new_world.User(**fixture)
+
+  def test_it(self):
+    world = self.spawn_world()
+    loc_a = self.spawn_loc_a()
+    loc_b = self.spawn_loc_b()
+    #bot_1 = self.spawn_bot_1()
+    #bot_2 = self.spawn_bot_2()
+
+    cl_1 = new_world.Client(self.bot_1)
+    cl_2 = new_world.Client(self.bot_2)
+
+    cl_1._rejoin_game(self.fixture_world['address'])
+    cl_2._rejoin_game(self.fixture_world['address'])

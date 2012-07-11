@@ -11,6 +11,7 @@ from eventlet import queue
 import zmq
 
 from zombie import shared
+from zombie import model
 
 
 SLEEP_TIME = 0.0001
@@ -235,20 +236,21 @@ class World(object):
   def cmd_last_location(self, context, user_id):
     """Get the last location for the given user and return a join token."""
     last_location_id = self.user_db.last_location(user_id)
-    location_address = self.location_db.get(last_location_id)
-    o = {'address': location_address,
+    location_ref = self.location_db.get(last_location_id)
+    o = {'address': location_ref.address[0],
          'join_token': {'user_id': user_id,
                         'location_id': last_location_id,
                         'from_id': last_location_id,
                         }
-        }
+         }
     return context.reply(o)
 
 
 class Kvs(dict):
   pass
 
-class WorldUserDatabase(object):
+
+class WorldUserDatabase(Kvs):
   """Interface for accessing user data."""
 
   def last_location(self, user_id):
@@ -256,7 +258,7 @@ class WorldUserDatabase(object):
     pass
 
 
-class WorldLocationDatabase(object):
+class WorldLocationDatabase(Kvs):
   """Interface for accessing location data."""
 
   def get(self, location_id):
@@ -275,9 +277,9 @@ class Location(object):
 
   """
 
-  def __init__(self, data):
-    self.data = data
-    self.keys = Keystore()
+  def __init__(self, user_db):
+    self.user_db = user_db
+    #self.keys = Keystore()
 
   def sign(self, data):
     return (data, 'i_am_a_signature')
@@ -309,10 +311,12 @@ class Location(object):
     # Announce the user's entrance, if applicable.
     self.broadcast_joined(ctx.username, join_token['from_id'])
 
-
-
   def cmd_look(self, context):
     return context.reply(self.data)
+
+
+class LocationUserDatabase(Kvs):
+  pass
 
 
 class User(object):
