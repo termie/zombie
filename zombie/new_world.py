@@ -320,8 +320,8 @@ class LocationUserDatabase(Kvs):
 
 
 class User(object):
-  def __init__(self, username):
-    self.username = username
+  def __init__(self, id):
+    self.id = id
 
 
 class Client(object):

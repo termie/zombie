@@ -159,11 +159,11 @@ class BasicTestCase(test.TestCase):
 
 
   fixture_loc_a = {
-      'users': [],
+      'users': {},
       }
 
   fixture_loc_b = {
-      'users': [],
+      'users': {},
       }
 
   fixture_bot_1 = {
@@ -175,6 +175,7 @@ class BasicTestCase(test.TestCase):
       }
 
   def setUp(self):
+    super(BasicTestCase, self).setUp()
     self.load_world(self.fixture_world)
     self.load_loc_a(self.fixture_loc_a)
     self.load_loc_b(self.fixture_loc_b)
@@ -199,6 +200,15 @@ class BasicTestCase(test.TestCase):
 
   def load_bot_2(self, fixture):
     self.bot_2 = new_world.User(**fixture)
+
+  def spawn_world(self):
+    pass
+
+  def spawn_loc_a(self):
+    pass
+
+  def spawn_loc_b(self):
+    pass
 
   def test_it(self):
     world = self.spawn_world()
