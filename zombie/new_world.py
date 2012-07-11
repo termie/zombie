@@ -83,6 +83,11 @@ class ConnectContext(dict):
     self['stream'].sock.send_multipart([msg_data])
 
   def send_cmd(self, cmd, data=None):
+    """Send command to the remote server and feed replies back to the caller.
+
+    This produces a generator to allow for multiple responses to a single
+    call. If an exception is returned it will be raised.
+    """
     msg = {'msg_id': uuid.uuid4().hex,
            'cmd': cmd,
            'args': data or {},
@@ -100,7 +105,7 @@ class ConnectContext(dict):
             rv = q.get(timeout=5)
             if rv == StopIteration:
               break
-            if rv['exc']:
+            if 'exc' in rv:
               raise RemoteError(rv['exc'])
             yield rv['data']
       except queue.Empty:
@@ -265,7 +270,7 @@ class World(object):
     """Get the last location for the given user and return a join token."""
     last_location_id = self.user_db.last_location(user_id)
     location_ref = self.location_db.get(last_location_id)
-    o = {'address': location_ref.address[0],
+    o = {'address': location_ref.address,
          'join_token': {'user_id': user_id,
                         'location_id': last_location_id,
                         'from_id': last_location_id,
@@ -275,23 +280,27 @@ class World(object):
 
 
 class Kvs(dict):
-  pass
+  deserialize = lambda x: x
+
+  def get(self, key, default=None):
+    rv = super(Kvs, self).get(key, default)
+    return self.deserialize(rv)
+
 
 
 class WorldUserDatabase(Kvs):
   """Interface for accessing user data."""
+  deserialize = model.User.from_dict
 
   def last_location(self, user_id):
     """Return the last location for a given user_id."""
-    pass
+    user_ref = self.get(user_id)
+    return user_ref.last_location
 
 
 class WorldLocationDatabase(Kvs):
   """Interface for accessing location data."""
-
-  def get(self, location_id):
-    """Return the information for a given location_id."""
-    pass
+  deserialize = model.Location.from_dict
 
 
 class Location(object):
@@ -388,7 +397,7 @@ class Client(object):
     loc_ev = event.Event()
 
     self.location_stream = Stream(self.location_handler)
-    shared.pool.spawn(self.location_stream.connect, addresss, loc_ev.send)
+    shared.pool.spawn(self.location_stream.connect, address, loc_ev.send)
     loc_context = loc_ev.wait()
     self.location = LocationClient(self.user, loc_context)
     return self.location
