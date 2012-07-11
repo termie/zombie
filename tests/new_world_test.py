@@ -230,6 +230,7 @@ class BasicTestCase(test.TestCase):
     cl_1 = new_world.Client(self.bot_1)
     cl_2 = new_world.Client(self.bot_2)
 
-    self.spawn(cl_1._rejoin_game, self.fixture_world['address'])
-    time.sleep(3)
+    #self.spawn(cl_1._rejoin_game, self.fixture_world['address'])
+    cl_1._rejoin_game(self.fixture_world['address'])
+    #time.sleep(1)
     #cl_2._rejoin_game(self.fixture_world['address'])

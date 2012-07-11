@@ -9,6 +9,7 @@ import uuid
 import eventlet
 from eventlet import event
 from eventlet import queue
+from eventlet import timeout
 import zmq
 
 from zombie import shared
@@ -16,6 +17,9 @@ from zombie import model
 
 
 SLEEP_TIME = 0.1
+
+class RemoteError(Exception):
+  pass
 
 
 class ServeContext(dict):
@@ -30,6 +34,16 @@ class ServeContext(dict):
     envelope = {'msg_id': self['msg_id'],
                 'cmd': 'reply',
                 'data': msg}
+    msg_data = json.dumps(envelope)
+    self['stream'].sock.send_multipart([self['ident'], msg_data])
+    if done:
+      self.end_reply()
+
+  def reply_exc(self, exc, done=True):
+    envelope = {'msg_id': self['msg_id'],
+                'cmd': 'reply',
+                'exc': str(exc),
+                'data': {}}
     msg_data = json.dumps(envelope)
     self['stream'].sock.send_multipart([self['ident'], msg_data])
     if done:
@@ -78,16 +92,19 @@ class ConnectContext(dict):
     q = self['stream'].register_channel(msg['msg_id'])
 
     self['stream'].sock.send_multipart([msg_data])
-    try:
-      while True:
-        eventlet.sleep(SLEEP_TIME)
-        if not q.empty():
-          rv = q.get(timeout=5)
-          if rv == StopIteration:
-            break
-          yield rv
-    except queue.Empty:
-      pass
+    with timeout.Timeout(3):
+      try:
+        while True:
+          eventlet.sleep(SLEEP_TIME)
+          if not q.empty():
+            rv = q.get(timeout=5)
+            if rv == StopIteration:
+              break
+            if rv['exc']:
+              raise RemoteError(rv['exc'])
+            yield rv['data']
+      except queue.Empty:
+        pass
 
     self['stream'].deregister_channel(msg['msg_id'])
 
@@ -125,15 +142,15 @@ class Stream(object):
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
         logging.debug('<SRECV %s', parts)
         ident = parts.pop(0)
-        msg = ServeContext(stream=self, ident=ident, data=parts[0])
+        ctx = ServeContext(stream=self, ident=ident, data=parts[0])
 
         # special case replies
-        if msg['cmd'] == 'reply':
-          shared.pool.spawn(self.handle_reply, msg)
-        elif msg['cmd'] == 'end_reply':
-          shared.pool.spawn(self.handle_end_reply, msg)
+        if ctx['cmd'] == 'reply':
+          shared.pool.spawn(self.handle_reply, ctx)
+        elif ctx['cmd'] == 'end_reply':
+          shared.pool.spawn(self.handle_end_reply, ctx)
         else:
-          shared.pool.spawn(self.handle_cmd, msg)
+          shared.pool.spawn(self.handle_cmd, ctx)
 
       except zmq.ZMQError as e:
         if e.errno == zmq.EAGAIN:
@@ -151,15 +168,15 @@ class Stream(object):
       try:
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
         logging.debug('<CRECV %s', parts)
-        msg = ConnectContext(stream=self, data=parts[0])
+        ctx = ConnectContext(stream=self, data=parts[0])
 
         # special case replies
-        if msg['cmd'] == 'reply':
-          shared.pool.spawn(self.handle_reply, msg)
-        elif msg['cmd'] == 'end_reply':
-          shared.pool.spawn(self.handle_end_reply, msg)
+        if ctx['cmd'] == 'reply':
+          shared.pool.spawn(self.handle_reply, ctx)
+        elif ctx['cmd'] == 'end_reply':
+          shared.pool.spawn(self.handle_end_reply, ctx)
         else:
-          shared.pool.spawn(self.handle_cmd, msg)
+          shared.pool.spawn(self.handle_cmd, ctx)
 
       except zmq.ZMQError as e:
         if e.errno == zmq.EAGAIN:
@@ -179,24 +196,28 @@ class Stream(object):
   def get_channel(self, msg_id):
     return self._reply_waiters[msg_id]
 
-  def handle_reply(self, msg):
+  def handle_reply(self, ctx):
     """Put responses to a message on our queue."""
-    if msg['msg_id'] not in self._reply_waiters:
-      raise Exception('no such reply waiter: %s' % msg['msg_id'])
-    reply_waiter = self._reply_waiters[msg['msg_id']]
-    reply_waiter.put(msg)
+    if ctx['msg_id'] not in self._reply_waiters:
+      raise Exception('no such reply waiter: %s' % ctx['msg_id'])
+    reply_waiter = self._reply_waiters[ctx['msg_id']]
+    reply_waiter.put(ctx)
 
-  def handle_end_reply(self, msg):
+  def handle_end_reply(self, ctx):
     """End responses to a message on our queue."""
-    if msg['msg_id'] not in self._reply_waiters:
-      raise Exception('no such reply waiter: %s' % msg['msg_id'])
-    reply_waiter = self._reply_waiters[msg['msg_id']]
+    if ctx['msg_id'] not in self._reply_waiters:
+      raise Exception('no such reply waiter: %s' % ctx['msg_id'])
+    reply_waiter = self._reply_waiters[ctx['msg_id']]
     reply_waiter.put(StopIteration)
 
-  def handle_cmd(self, msg):
+  def handle_cmd(self, ctx):
     """Attempt to call a method on the handler."""
-    f = getattr(self.handler, 'cmd_%s' % msg['cmd'])
-    f(msg, **dict((str(k), v) for k, v in msg['args'].iteritems()))
+    try:
+      f = getattr(self.handler, 'cmd_%s' % ctx['cmd'])
+      f(ctx, **dict((str(k), v) for k, v in ctx['args'].iteritems()))
+    except Exception as e:
+      logging.exception('EXC in handle_cmd\ncmd_%s(**%s)', ctx['cmd'], ctx['args'])
+      ctx.reply_exc(e)
 
 
 class Keystore(object):
@@ -234,13 +255,13 @@ class World(object):
     self.location_db = location_db
     self.user_db = user_db
 
-  def cmd_lookup_location(self, context, location_id):
-    return context.reply({location_id: self.location_db.get(location_id)})
+  def cmd_lookup_location(self, ctx, location_id):
+    return ctx.reply({location_id: self.location_db.get(location_id)})
 
-  def cmd_default_location(self, context):
-    return self.cmd_lookup_location(context, 'default')
+  def cmd_default_location(self, ctx):
+    return self.cmd_lookup_location(ctx, 'default')
 
-  def cmd_last_location(self, context, user_id):
+  def cmd_last_location(self, ctx, user_id):
     """Get the last location for the given user and return a join token."""
     last_location_id = self.user_db.last_location(user_id)
     location_ref = self.location_db.get(last_location_id)
@@ -250,7 +271,7 @@ class World(object):
                         'from_id': last_location_id,
                         }
          }
-    return context.reply(o)
+    return ctx.reply(o)
 
 
 class Kvs(dict):
@@ -318,8 +339,8 @@ class Location(object):
     # Announce the user's entrance, if applicable.
     self.broadcast_joined(ctx.username, join_token['from_id'])
 
-  def cmd_look(self, context):
-    return context.reply(self.data)
+  def cmd_look(self, ctx):
+    return ctx.reply(self.data)
 
 
 class LocationUserDatabase(Kvs):
@@ -381,8 +402,8 @@ class Client(object):
     - Join last location with reconnect token.
     """
     world = self._connect_to_world(address)
-    logging.debug('AFTER CONNECT')
     last_loc = world.last_location()
+    logging.debug('LAST LOC %s', last_loc)
     loc_address = last_loc['address']
     join_token = last_loc['join_token']
 
@@ -447,7 +468,7 @@ class WorldClient(object):
 
   def last_location(self):
     """Request the current user's last location."""
-    rv = self.ctx.send_cmd('last_location', data={'user': self.user.username})
+    rv = self.ctx.send_cmd('last_location', data={'user_id': self.user.id})
     last_loc = rv.next()
     return last_loc
 
