@@ -9,3 +9,4 @@ pyasn1
 redis
 eventlet
 pyzmq
+micromodels

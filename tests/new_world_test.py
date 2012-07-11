@@ -99,7 +99,6 @@ class LocationTestCase(BaseTestCase):
     pass
 
 
-
 class StreamTestCase(test.TestCase):
   def test_serve(self):
     callback_called = [False]

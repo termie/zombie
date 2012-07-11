@@ -4,3 +4,41 @@ Scripted Bot
 
 
 
+
+
+Mock Bot
+--------
+
+ - World
+ - Loc A
+ - Loc B
+ - Bot 1 in Loc A
+ - Bot 2 in Loc B
+ - Bot 1 moves to Loc B
+ - Bot 2 sees announcement
+ - Bot 1 disconnects
+ - Bot 2 sees announcement
+ - Bot 1 reconnects
+ - Bot 2 sees announcement
+
+
+MVP
+---
+
+ - user can join the world
+ - user can move between different rooms
+ - user can interact with npcs
+ - npcs can give user items
+ - npcs can require that a user has an item
+ - locations can require that a user has an item
+
+  * world manager
+    * db stores:
+      * locations of users
+  * location manager
+    * db stores:
+      * current users
+      * current npcs
+  * client for high level operations on behalf of a user
+  * user object for storing user state
+  * npc objects

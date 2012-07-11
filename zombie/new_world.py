@@ -222,14 +222,46 @@ class World(object):
     - ( ) Keeping track of the locations of all users (accept_move)
   """
 
-  def __init__(self, location_db):
+  def __init__(self, location_db, user_db):
     self.location_db = location_db
+    self.user_db = user_db
 
   def cmd_lookup_location(self, context, location_id):
     return context.reply({location_id: self.location_db.get(location_id)})
 
   def cmd_default_location(self, context):
     return self.cmd_lookup_location(context, 'default')
+
+  def cmd_last_location(self, context, user_id):
+    """Get the last location for the given user and return a join token."""
+    last_location_id = self.user_db.last_location(user_id)
+    location_address = self.location_db.get(last_location_id)
+    o = {'address': location_address,
+         'join_token': {'user_id': user_id,
+                        'location_id': last_location_id,
+                        'from_id': last_location_id,
+                        }
+        }
+    return context.reply(o)
+
+
+class Kvs(dict):
+  pass
+
+class WorldUserDatabase(object):
+  """Interface for accessing user data."""
+
+  def last_location(self, user_id):
+    """Return the last location for a given user_id."""
+    pass
+
+
+class WorldLocationDatabase(object):
+  """Interface for accessing location data."""
+
+  def get(self, location_id):
+    """Return the information for a given location_id."""
+    pass
 
 
 class Location(object):
