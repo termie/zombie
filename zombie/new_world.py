@@ -16,7 +16,7 @@ from zombie import shared
 from zombie import model
 
 
-SLEEP_TIME = 0.1
+SLEEP_TIME = 0.001
 
 class RemoteError(Exception):
   pass
@@ -28,14 +28,18 @@ class ServeContext(dict):
   def __init__(self, stream, ident, data):
     super(ServeContext, self).__init__(**json.loads(data))
     self['ident'] = ident
-    self['stream'] = stream
+    self.stream = stream
 
   def reply(self, msg, done=True):
+    try:
+      msg = msg.to_dict()
+    except AttributeError:
+      pass
     envelope = {'msg_id': self['msg_id'],
                 'cmd': 'reply',
                 'data': msg}
     msg_data = json.dumps(envelope)
-    self['stream'].sock.send_multipart([self['ident'], msg_data])
+    self.stream.sock.send_multipart([self['ident'], msg_data])
     if done:
       self.end_reply()
 
@@ -45,7 +49,7 @@ class ServeContext(dict):
                 'exc': str(exc),
                 'data': {}}
     msg_data = json.dumps(envelope)
-    self['stream'].sock.send_multipart([self['ident'], msg_data])
+    self.stream.sock.send_multipart([self['ident'], msg_data])
     if done:
       self.end_reply()
 
@@ -53,11 +57,11 @@ class ServeContext(dict):
     msg = {'msg_id': self['msg_id'],
            'cmd': 'end_reply'}
     msg_data = json.dumps(msg)
-    self['stream'].sock.send_multipart([self['ident'], msg_data])
+    self.stream.sock.send_multipart([self['ident'], msg_data])
 
   def send(self, msg, *args):
     logging.debug('SSEND> %s', [msg % args])
-    self['stream'].sock.send_multipart([msg % args])
+    self.stream.sock.send_multipart([msg % args])
 
 
 class ConnectContext(dict):
@@ -65,14 +69,18 @@ class ConnectContext(dict):
   # sock
   def __init__(self, stream, data):
     super(ConnectContext, self).__init__(**json.loads(data))
-    self['stream'] = stream
+    self.stream = stream
 
   def reply(self, msg, done=True):
+    try:
+      msg = msg.to_dict()
+    except AttributeError:
+      pass
     envelope = {'msg_id': self['msg_id'],
                 'cmd': 'reply',
                 'data': msg}
     msg_data = json.dumps(envelope)
-    self['stream'].sock.send_multipart([msg_data])
+    self.stream.sock.send_multipart([msg_data])
     if done:
       self.end_reply()
 
@@ -80,7 +88,7 @@ class ConnectContext(dict):
     msg = {'msg_id': self['msg_id'],
            'cmd': 'end_reply'}
     msg_data = json.dumps(msg)
-    self['stream'].sock.send_multipart([msg_data])
+    self.stream.sock.send_multipart([msg_data])
 
   def send_cmd(self, cmd, data=None):
     """Send command to the remote server and feed replies back to the caller.
@@ -94,9 +102,9 @@ class ConnectContext(dict):
            }
     msg_data = json.dumps(msg)
 
-    q = self['stream'].register_channel(msg['msg_id'])
+    q = self.stream.register_channel(msg['msg_id'])
 
-    self['stream'].sock.send_multipart([msg_data])
+    self.stream.sock.send_multipart([msg_data])
     with timeout.Timeout(3):
       try:
         while True:
@@ -111,11 +119,11 @@ class ConnectContext(dict):
       except queue.Empty:
         pass
 
-    self['stream'].deregister_channel(msg['msg_id'])
+    self.stream.deregister_channel(msg['msg_id'])
 
   def send(self, msg, *args):
     logging.debug('CSEND> %s', [msg % args])
-    self['stream'].sock.send_multipart([msg % args])
+    self.stream.sock.send_multipart([msg % args])
 
 
 class Stream(object):
@@ -278,13 +286,45 @@ class World(object):
          }
     return ctx.reply(o)
 
+  def cmd_update_user_location(self, ctx, join_token):
+    # verify the token is valid
+    # verify the token is for the location that is sending it
+    join_token_ref = model.JoinToken.from_dict(join_token)
+    user_ref = self.user_db.get(join_token_ref.user_id)
+    user_ref.last_location = join_token_ref.location_id
+    self.user_db.set(join_token_ref.user_id, user_ref)
+    return ctx.reply({'result': 'ok'})
+
+  def cmd_make_join_token(self, ctx, user_id, from_id, location_id):
+    # TODO(termie): verify that the locations connect
+    location_ref = self.location_db.get(location_id)
+    token = model.JoinToken.from_dict({'user_id': user_id,
+                                       'from_id': from_id,
+                                       'location_id': location_id})
+    logging.debug('BEFORE WORLD_JOIN')
+    ctx.reply({'address': location_ref.address,
+               'join_token': token.to_dict()})
+    logging.debug('AFTER WORLD_JOIN')
+
+
+
 
 class Kvs(dict):
-  deserialize = lambda x: x
+  deserialize = staticmethod(lambda x: x)
+
+  def set(self, key, valu
+    try:
+      value = value.to_dict()
+    except AttributeError:
+      pass
+    self.__setitem__(key, value)
 
   def get(self, key, default=None):
     rv = super(Kvs, self).get(key, default)
     return self.deserialize(rv)
+
+  def delete(self, key):
+    self.__delitem__(key)
 
 
 class WorldUserDatabase(Kvs):
@@ -313,8 +353,9 @@ class Location(object):
 
   """
 
-  def __init__(self, user_db):
+  def __init__(self, user_db, location_id):
     self.user_db = user_db
+    self.location_id = location_id
     #self.keys = Keystore()
 
   def _connect_to_world(self, address):
@@ -330,7 +371,6 @@ class Location(object):
     logging.debug('FINSIHED')
     self.world = LocationWorldClient(self, world_context)
     return self.world
-
 
   def sign(self, data):
     return (data, 'i_am_a_signature')
@@ -353,14 +393,25 @@ class Location(object):
     in the db.
     """
     # TODO(termie): verify join token
+    join_token_ref = model.JoinToken.from_dict(join_token)
     self.world.update_user_location(join_token)
     ctx.reply({'result': 'ok'})
 
     # Add the user to our local db
-    #self.users.add(ctx.username, ctx)
+    self.user_db.set(join_token_ref.user_id, ctx)
 
     # Announce the user's entrance, if applicable.
     #self.broadcast_joined(ctx.username, join_token['from_id'])
+
+  def cmd_move(self, ctx, user_id, new_location_id):
+    """Provide the user with a join_token for the new location."""
+    logging.debug('LOC MOVE')
+    o = self.world.make_join_token(user_id, self.location_id, new_location_id)
+    logging.debug('BEFORE LOC_MOVE REPLY')
+    ctx.reply(o)
+    logging.debug('AFTER LOC_MOVE')
+    self.user_db.delete(user_id)
+
 
   def cmd_look(self, ctx):
     return ctx.reply(self.data)
@@ -379,6 +430,15 @@ class LocationWorldClient(object):
                            data={'join_token': join_token})
     return rv.next()
 
+  def make_join_token(self, user_id, from_id, location_id):
+    rv = self.ctx.send_cmd('make_join_token',
+                           data={'user_id': user_id,
+                                 'from_id': from_id,
+                                 'location_id': location_id})
+    logging.debug('FOO_LOC_WORLD')
+    o = rv.next()
+    logging.debug('AFTER FOO_LOC_WORLD')
+    return o
 
 class LocationUserDatabase(Kvs):
   pass
@@ -491,7 +551,8 @@ class LocationClient(object):
                       'from_id': <last_location_id>}
         }
     """
-    rv = self.ctx.send_cmd('move', data={'new_location': new_location_id})
+    rv = self.ctx.send_cmd('move', data={'user_id': self.user.id,
+                                         'new_location_id': new_location_id})
     move_rv = rv.next()
     return move_rv
 

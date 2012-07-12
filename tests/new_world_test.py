@@ -190,11 +190,13 @@ class BasicTestCase(test.TestCase):
 
   def load_loc_a(self, fixture):
     self.loc_a = new_world.Location(
-        user_db=new_world.LocationUserDatabase(**fixture['users']))
+        user_db=new_world.LocationUserDatabase(**fixture['users']),
+        location_id='loc_a')
 
   def load_loc_b(self, fixture):
     self.loc_b = new_world.Location(
-        user_db=new_world.LocationUserDatabase(**fixture['users']))
+        user_db=new_world.LocationUserDatabase(**fixture['users']),
+        location_id='loc_b')
 
   def load_bot_1(self, fixture):
     self.bot_1 = new_world.User(**fixture)
@@ -234,5 +236,9 @@ class BasicTestCase(test.TestCase):
 
     #self.spawn(cl_1._rejoin_game, self.fixture_world['address'])
     cl_1._rejoin_game(self.fixture_world['address'])
+    self.assert_(self.loc_a.user_db.get(self.bot_1.id))
+    cl_1._move_location('loc_b')
+    self.assert_(not self.loc_a.user_db.get(self.bot_1.id))
+    self.assert_(self.loc_b.user_db.get(self.bot_1.id))
     #time.sleep(1)
     #cl_2._rejoin_game(self.fixture_world['address'])

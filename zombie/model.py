@@ -12,10 +12,21 @@ class AddressField(mm.CharField):
 class User(mm.Model):
   key_name = '%(id)s'
 
-  id = UuidField()
-  last_location = UuidField()
+  id = mm.CharField()
+  last_location = mm.CharField()
 
 
 class Location(mm.Model):
-  id = UuidField()
+  id = mm.CharField()
   address = AddressField()
+
+
+class JoinToken(mm.Model):
+  """General authorization to enter an area.
+
+  If from_id == location_id then this is probably a reconnect.
+  """
+  user_id = mm.CharField()
+  location_id = mm.CharField()
+  from_id = mm.CharField()
+

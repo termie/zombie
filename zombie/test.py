@@ -23,7 +23,9 @@ gflags.DEFINE_boolean('fast_tests', True,
 gflags.DEFINE_boolean('pdb', False,
                       'drop into pdb on errors (nose flag)')
 gflags.DEFINE_boolean('logcapture', True,
-                      'drop into pdb on errors (nose flag)')
+                      'capture logs (nose flag)')
+gflags.DEFINE_integer('spawn_timeout', 1,
+                      'how long to allow spawned greenthreads')
 
 
 class TestCase(unittest.TestCase):
@@ -36,7 +38,9 @@ class TestCase(unittest.TestCase):
     shared.pool.spawn = self.spawn
 
   def spawn(self, *args, **kw):
-    spawned = self._real_spawn(eventlet.with_timeout, 1, *args, **kw)
+    spawned = self._real_spawn(eventlet.with_timeout,
+                               FLAGS.spawn_timeout,
+                               *args, **kw)
     logging.debug('spawned %s', args[0])
     self._spawned.append(spawned)
     return spawned
