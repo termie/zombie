@@ -29,6 +29,11 @@ class Client(object):
     self.user = user
     self.world = None
     self.location = None
+    self.id = self.user.id
+
+  def verify(self, msg_parts):
+    data, caller_id, sig = msg_parts
+    assert sig == 'signature'
 
   def _connect_to_world(self, address):
     """Establish a connection to the main world.

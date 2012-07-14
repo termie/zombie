@@ -27,6 +27,10 @@ class Location(object):
     self.exits = exits
     #self.keys = Keystore()
 
+  def verify(self, msg_parts):
+    data, caller_id, sig = msg_parts
+    assert sig == 'signature'
+
   def _connect_to_world(self, address):
     """Establish a connection to the main world.
 
@@ -72,6 +76,15 @@ class Location(object):
          'exits': self.exits,
          'users': self.user_db.keys()}
     return ctx.reply(o)
+
+  def cmd_route(self, ctx, other_id, package):
+    """Route a message to another user in this location.
+
+    This will envelope the package to be routed.
+
+    Results will be sent back to the caller.
+    """
+    other_ctx = self.user_db.get(other_id)
 
   def cmd_look_at_other(self, ctx, other_id):
     other_ctx = self.user_db.get(other_id)

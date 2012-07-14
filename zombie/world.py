@@ -13,9 +13,14 @@ class World(object):
     - ( ) Keeping track of the locations of all users (accept_move)
   """
 
-  def __init__(self, location_db, user_db):
+  def __init__(self, location_db, user_db, world_id=None):
     self.location_db = location_db
     self.user_db = user_db
+    self.id = world_id
+
+  def verify(self, msg_parts):
+    data, caller_id, sig = msg_parts
+    assert sig == 'signature'
 
   def cmd_lookup_location(self, ctx, location_id):
     return ctx.reply({location_id: self.location_db.get(location_id)})

@@ -173,7 +173,8 @@ class BasicTestCase(test.TestCase):
   def load_world(self, fixture):
     self.world = world.World(
           location_db=world.WorldLocationDatabase(**fixture['locations']),
-          user_db=world.WorldUserDatabase(**fixture['users']))
+          user_db=world.WorldUserDatabase(**fixture['users']),
+          world_id='foo')
 
   def load_loc_a(self, fixture):
     self.loc_a = location.Location(
@@ -222,6 +223,7 @@ class BasicTestCase(test.TestCase):
     cl_1 = client.Client(self.bot_1)
     cl_2 = client.Client(self.bot_2)
 
+    # join the game with bot 1
     cl_1._rejoin_game(self.fixture_world['address'])
     self.assert_(self.loc_a.user_db.get(self.bot_1.id))
 
@@ -230,23 +232,26 @@ class BasicTestCase(test.TestCase):
     self.assert_(self.loc_b.id in rv['exits'].values())
     self.assert_(self.bot_1.id in rv['users'])
 
-
+    # move to a new location
     cl_1._move_location(self.loc_b.id)
     self.assert_(not self.loc_a.user_db.get(self.bot_1.id))
     self.assert_(self.loc_b.user_db.get(self.bot_1.id))
 
+    # check out the new location
     rv = cl_1._look()
     self.assert_(self.loc_a.id in rv['exits'].values())
     self.assert_(self.bot_1.id in rv['users'])
     self.assert_(self.bot_2.id not in rv['users'])
 
+    # bring bot 2 into the game
     cl_2._rejoin_game(self.fixture_world['address'])
     self.assert_(self.loc_b.user_db.get(self.bot_2.id))
 
+    # look again and verify that bot 2 shows up
     rv = cl_1._look()
     self.assert_(self.bot_2.id in rv['users'])
 
-
+    # look at bot 2
     rv = cl_1._look_at_other(self.bot_2.id)
     self.assertEquals(rv['description'], self.bot_2.description)
 

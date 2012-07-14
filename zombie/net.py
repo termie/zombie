@@ -16,15 +16,23 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_float('sleep_time', 0.001,
                     'how long to wait in event loops')
 
-
-class ServeContext(dict):
-  """Context given to servers when clients send commands."""
-
-  def __init__(self, stream, ident, data):
-    super(ServeContext, self).__init__(**json.loads(data))
-    self['ident'] = ident
+class Context(dict):
+  def __init__(self, signer, stream, msg_parts):
+    data, caller_id, sig = msg_parts
+    self.signer = signer
+    self.caller_id = caller_id
+    self.sig = sig
+    self.msg_parts = msg_parts
     self.stream = stream
     self.data = json.loads(data)
+    super(Context, self).__init__(**json.loads(data))
+
+  def _sign(self, s):
+    return self.signer.id, 'signature'
+
+  def _send(self, msg_data):
+    caller_id, sig = self._sign(msg_data)
+    self.stream.sock.send_multipart([msg_data, caller_id, sig])
 
   def reply(self, msg, done=True):
     try:
@@ -34,8 +42,9 @@ class ServeContext(dict):
     envelope = {'msg_id': self['msg_id'],
                 'cmd': 'reply',
                 'data': msg}
+
     msg_data = json.dumps(envelope)
-    self.stream.sock.send_multipart([self['ident'], msg_data])
+    self._send(msg_data)
     if done:
       self.end_reply()
 
@@ -45,7 +54,7 @@ class ServeContext(dict):
                 'exc': str(exc),
                 'data': {}}
     msg_data = json.dumps(envelope)
-    self.stream.sock.send_multipart([self['ident'], msg_data])
+    self._send(msg_data)
     if done:
       self.end_reply()
 
@@ -53,11 +62,7 @@ class ServeContext(dict):
     msg = {'msg_id': self['msg_id'],
            'cmd': 'end_reply'}
     msg_data = json.dumps(msg)
-    self.stream.sock.send_multipart([self['ident'], msg_data])
-
-  def send(self, msg, *args):
-    logging.debug('SSEND> %s', [msg % args])
-    self.stream.sock.send_multipart([msg % args])
+    self._send(msg_data)
 
   def send_cmd(self, cmd, data=None):
     """Send command to the connection and feed replies back to the caller.
@@ -73,7 +78,8 @@ class ServeContext(dict):
 
     q = self.stream.register_channel(msg['msg_id'])
 
-    self.stream.sock.send_multipart([self['ident'], msg_data])
+    self._send(msg_data)
+
     with timeout.Timeout(3):
       try:
         while True:
@@ -91,77 +97,21 @@ class ServeContext(dict):
     self.stream.deregister_channel(msg['msg_id'])
 
 
-class ConnectContext(dict):
+class ServeContext(Context):
+  """Context given to servers when clients send commands."""
+
+  def __init__(self, ident, signer, stream, msg_parts):
+    super(ServeContext, self).__init__(signer, stream, msg_parts)
+    self.ident = ident
+
+  def _send(self, msg_data):
+    caller_id, sig = self._sign(msg_data)
+    self.stream.sock.send_multipart([self.ident, msg_data, caller_id, sig])
+
+
+class ConnectContext(Context):
   """Context given to clients when connected to servers."""
-
-  def __init__(self, stream, data):
-    super(ConnectContext, self).__init__(**json.loads(data))
-    self.data = json.loads(data)
-    self.stream = stream
-
-  def reply(self, msg, done=True):
-    try:
-      msg = msg.to_dict()
-    except AttributeError:
-      pass
-    envelope = {'msg_id': self['msg_id'],
-                'cmd': 'reply',
-                'data': msg}
-    msg_data = json.dumps(envelope)
-    self.stream.sock.send_multipart([msg_data])
-    if done:
-      self.end_reply()
-
-  def reply_exc(self, exc, done=True):
-    envelope = {'msg_id': self['msg_id'],
-                'cmd': 'reply',
-                'exc': str(exc),
-                'data': {}}
-    msg_data = json.dumps(envelope)
-    self.stream.sock.send_multipart([msg_data])
-    if done:
-      self.end_reply()
-
-  def end_reply(self):
-    msg = {'msg_id': self['msg_id'],
-           'cmd': 'end_reply'}
-    msg_data = json.dumps(msg)
-    self.stream.sock.send_multipart([msg_data])
-
-  def send_cmd(self, cmd, data=None):
-    """Send command to the remote server and feed replies back to the caller.
-
-    This produces a generator to allow for multiple responses to a single
-    call. If an exception is returned it will be raised.
-    """
-    msg = {'msg_id': uuid.uuid4().hex,
-           'cmd': cmd,
-           'args': data or {},
-           }
-    msg_data = json.dumps(msg)
-
-    q = self.stream.register_channel(msg['msg_id'])
-
-    self.stream.sock.send_multipart([msg_data])
-    with timeout.Timeout(3):
-      try:
-        while True:
-          time.sleep(FLAGS.sleep_time)
-          if not q.empty():
-            rv = q.get(timeout=5)
-            if rv == StopIteration:
-              break
-            if 'exc' in rv:
-              raise exception.RemoteError(rv['exc'])
-            yield rv['data']
-      except queue.Empty:
-        pass
-
-    self.stream.deregister_channel(msg['msg_id'])
-
-  def send(self, msg, *args):
-    logging.debug('CSEND> %s', [msg % args])
-    self.stream.sock.send_multipart([msg % args])
+  pass
 
 
 class Stream(object):
@@ -193,7 +143,11 @@ class Stream(object):
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
         logging.debug('<SRECV %s', parts)
         ident = parts.pop(0)
-        ctx = ServeContext(stream=self, ident=ident, data=parts[0])
+        self.handler.verify(parts)
+        ctx = ServeContext(stream=self,
+                           signer=self.handler,
+                           ident=ident,
+                           msg_parts=parts)
 
         # special case replies
         if ctx['cmd'] == 'reply':
@@ -213,13 +167,19 @@ class Stream(object):
     self.sock = shared.zctx.socket(zmq.XREQ)
     self.sock.connect(address)
 
-    shared.pool.spawn(callback, ConnectContext(stream=self, data='{}'))
+    shared.pool.spawn(callback,
+                      ConnectContext(stream=self,
+                                     signer=self.handler,
+                                     msg_parts=['{}', None, None]))
     while not self.sock.closed:
       time.sleep(FLAGS.sleep_time)
       try:
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
         logging.debug('<CRECV %s', parts)
-        ctx = ConnectContext(stream=self, data=parts[0])
+        self.handler.verify(parts)
+        ctx = ConnectContext(stream=self,
+                             signer=self.handler,
+                             msg_parts=parts)
 
         # special case replies
         if ctx['cmd'] == 'reply':
