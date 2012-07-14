@@ -84,7 +84,13 @@ class Location(object):
 
     Results will be sent back to the caller.
     """
+    logging.debug('GOT ORUTE')
     other_ctx = self.user_db.get(other_id)
+    logging.debug('GOT ORUTE')
+    rv = other_ctx.send_cmd('route', {'other_id': other_id,
+                                      'package': package})
+    for x in rv:
+      ctx.reply(x)
 
   def cmd_look_at_other(self, ctx, other_id):
     other_ctx = self.user_db.get(other_id)

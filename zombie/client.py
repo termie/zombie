@@ -1,3 +1,4 @@
+import json
 import logging
 
 import gflags
@@ -108,6 +109,16 @@ class Client(object):
   def cmd_look(self, ctx):
     return self.user.cmd_look(ctx)
 
+  def cmd_route(self, ctx, other_id, package):
+    if self.id != other_id:
+      # ignore these for now
+      return
+    msg_parts = json.loads(package)
+    self.verify(msg_parts)
+    new_ctx = ctx.repack(msg_parts)
+    new_ctx.stream.handle_cmd(new_ctx)
+
+
 
 class LocationClient(object):
   """Interface to the various commands we might send to a location."""
@@ -145,7 +156,7 @@ class LocationClient(object):
     return rv.next()
 
   def look_at_other(self, other_id):
-    rv = self.ctx.send_cmd('look_at_other', {'other_id': other_id})
+    rv = self.ctx.route_cmd(other_id, 'look', {})
     return rv.next()
 
 
