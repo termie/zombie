@@ -312,7 +312,7 @@ class World(object):
 class Kvs(dict):
   deserialize = staticmethod(lambda x: x)
 
-  def set(self, key, valu
+  def set(self, key, value):
     try:
       value = value.to_dict()
     except AttributeError:
