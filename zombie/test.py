@@ -11,10 +11,9 @@ from nose import result
 from nose import core
 from nose.plugins import skip
 
-from zombie import character
-from zombie import kvs
+#from zombie import kvs
 from zombie import shared
-from zombie import world
+#from zombie import world
 
 
 FLAGS = gflags.FLAGS
@@ -61,6 +60,7 @@ def skip_if_fast(f):
 
 
 def setup_test_fixtures():
+  return
   db_prefix = 'test' + uuid.uuid4().hex
   world_id = 'the_world'
   char_id = 'the_char'

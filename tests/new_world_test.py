@@ -1,14 +1,16 @@
-#from zombie import character
-#from zombie import net
-from zombie import shared
-from zombie import test
-#from zombie import world
-from zombie import new_world
 import time
 import logging
 import functools
 
 from eventlet import debug
+
+from zombie import client
+from zombie import location
+from zombie import net
+from zombie import shared
+from zombie import test
+from zombie import world
+
 
 location_db = {'default': 'inproc://default_location'}
 user_db = {'asd': 'asda'}
@@ -39,10 +41,10 @@ class EchoHandler(object):
 
 class BaseTestCase(test.TestCase):
   def _get_server(self):
-    return new_world.Stream(EchoHandler())
+    return net.Stream(EchoHandler())
 
   def _get_client(self):
-    return new_world.Stream(TestHandler())
+    return net.Stream(TestHandler())
 
   def call(self, cb):
     callback_called = [False]
@@ -63,84 +65,67 @@ class BaseTestCase(test.TestCase):
     self.assert_(callback_called)
 
 
-class WorldTestCase(BaseTestCase):
-  def _get_server(self):
-    return new_world.Stream(new_world.World(location_db=location_db,
-                                            user_db=user_db))
+#class WorldTestCase(BaseTestCase):
+#  def _get_server(self):
+#    return net.Stream(world.World(location_db=location_db,
+#                                            user_db=user_db))
 
-  def test_world_default_location(self):
-    def cb(context):
-      r = context.send_cmd('default_location')
-      for result in r:
-        self.assertEqual(result['data']['default'], location_db['default'])
+#  def test_world_default_location(self):
+#    def cb(context):
+#      r = context.send_cmd('default_location')
+#      for result in r:
+#        self.assertEqual(result['default'], location_db['default'])
 
-    self.call(cb)
+#    self.call(cb)
 
-  def test_world_lookup_location(self):
-    def cb(context):
-      r = context.send_cmd('lookup_location', {'location_id': 'default'})
-      for result in r:
-        self.assertEqual(result['data']['default'], location_db['default'])
+#  def test_world_lookup_location(self):
+#    def cb(context):
+#      r = context.send_cmd('lookup_location', {'location_id': 'default'})
+#      for result in r:
+#        self.assertEqual(result['default'], location_db['default'])
 
-    self.call(cb)
-
-
-class LocationTestCase(BaseTestCase):
-  def test_basic(self):
-    # User connects to world
-    # User is unknown so gets default location
-    # User connects to default location
-    # User joins the default location
-    # User looks and sees the location
-    # User disconnects
-    # User reconnects to world is known so gets last location as default
-    # User connects to a different location
-    # User attempts to join the different location
-    # New location rejects join
-    # User connects to the default location
-    # User joins the default location
-    pass
+#    self.call(cb)
 
 
-class StreamTestCase(test.TestCase):
-  def test_serve(self):
-    callback_called = [False]
+#class StreamTestCase(test.TestCase):
+#  def test_serve(self):
+#    callback_called = [False]
 
-    s = new_world.Stream(EchoHandler())
-    self.spawn(s.serve, WORLD_ADDR)
+#    s = net.Stream(EchoHandler())
+#    self.spawn(s.serve, WORLD_ADDR)
 
-    def cb(context):
-      callback_called[0] = True
-      r = context.send_cmd('echo_and_die', {'message': 'foo'})
-      for result in r:
-        self.assertEqual(result['data']['message'], 'foo')
-      context['stream'].close()
+#    def cb(context):
+#      callback_called[0] = True
+#      r = context.send_cmd('echo_and_die', {'message': 'foo'})
+#      for result in r:
+#        self.assertEqual(result['data']['message'], 'foo')
+#      context['stream'].close()
 
-    c = new_world.Stream(TestHandler())
-    self.spawn(c.connect, WORLD_ADDR, cb)
-    shared.pool.waitall()
-    self.assert_(callback_called[0])
+#    c = net.Stream(TestHandler())
+#    self.spawn(c.connect, WORLD_ADDR, cb)
+#    shared.pool.waitall()
+#    self.assert_(callback_called[0])
 
-  def test_multiple_responses(self):
-    callback_called = [False]
+#  def test_multiple_responses(self):
+#    callback_called = [False]
 
-    s = new_world.Stream(EchoHandler())
-    self.spawn(s.serve, WORLD_ADDR)
+#    s = net.Stream(EchoHandler())
+#    self.spawn(s.serve, WORLD_ADDR)
 
-    def cb(context):
-      callback_called[0] = True
-      r = context.send_cmd('echo_three_and_die', {'message': 'foo'})
-      i = 0
-      for result in r:
-        self.assertEqual(result['data']['message'], 'foo')
-        i += 1
-      self.assertEqual(i, 3)
-      context['stream'].close()
+#    def cb(context):
+#      callback_called[0] = True
+#      r = context.send_cmd('echo_three_and_die', {'message': 'foo'})
+#      i = 0
+#      for result in r:
+#        self.assertEqual(result['message'], 'foo')
+#        i += 1
+#      self.assertEqual(i, 3)
+#      context['stream'].close()
 
-    c = new_world.Stream(TestHandler())
-    self.spawn(c.connect, WORLD_ADDR, cb)
-    shared.pool.waitall()
-    self.assert_(callback_called[0])
+#    c = net.Stream(TestHandler())
+#    self.spawn(c.connect, WORLD_ADDR, cb)
+#    shared.pool.waitall()
+#    self.assert_(callback_called[0])
 
 
 class BasicTestCase(test.TestCase):
@@ -184,40 +169,40 @@ class BasicTestCase(test.TestCase):
     self.load_bot_2(self.fixture_bot_2)
 
   def load_world(self, fixture):
-    self.world = new_world.World(
-          location_db=new_world.WorldLocationDatabase(**fixture['locations']),
-          user_db=new_world.WorldUserDatabase(**fixture['users']))
+    self.world = world.World(
+          location_db=world.WorldLocationDatabase(**fixture['locations']),
+          user_db=world.WorldUserDatabase(**fixture['users']))
 
   def load_loc_a(self, fixture):
-    self.loc_a = new_world.Location(
-        user_db=new_world.LocationUserDatabase(**fixture['users']),
+    self.loc_a = location.Location(
+        user_db=location.LocationUserDatabase(**fixture['users']),
         location_id='loc_a')
 
   def load_loc_b(self, fixture):
-    self.loc_b = new_world.Location(
-        user_db=new_world.LocationUserDatabase(**fixture['users']),
+    self.loc_b = location.Location(
+        user_db=location.LocationUserDatabase(**fixture['users']),
         location_id='loc_b')
 
   def load_bot_1(self, fixture):
-    self.bot_1 = new_world.User(**fixture)
+    self.bot_1 = client.User(**fixture)
 
   def load_bot_2(self, fixture):
-    self.bot_2 = new_world.User(**fixture)
+    self.bot_2 = client.User(**fixture)
 
   def spawn_world(self):
-    world_stream = new_world.Stream(self.world)
+    world_stream = net.Stream(self.world)
     self.spawn(world_stream.serve, self.fixture_world['address'])
     return world_stream
 
   def spawn_loc_a(self):
-    loc_a_stream = new_world.Stream(self.loc_a)
+    loc_a_stream = net.Stream(self.loc_a)
     self.spawn(loc_a_stream.serve,
                self.fixture_world['locations']['loc_a']['address'])
     self.loc_a._connect_to_world(self.fixture_world['address'])
     return loc_a_stream
 
   def spawn_loc_b(self):
-    loc_b_stream = new_world.Stream(self.loc_b)
+    loc_b_stream = net.Stream(self.loc_b)
     self.spawn(loc_b_stream.serve,
                self.fixture_world['locations']['loc_b']['address'])
     self.loc_b._connect_to_world(self.fixture_world['address'])
@@ -231,8 +216,8 @@ class BasicTestCase(test.TestCase):
     #bot_1 = self.spawn_bot_1()
     #bot_2 = self.spawn_bot_2()
 
-    cl_1 = new_world.Client(self.bot_1)
-    cl_2 = new_world.Client(self.bot_2)
+    cl_1 = client.Client(self.bot_1)
+    cl_2 = client.Client(self.bot_2)
 
     #self.spawn(cl_1._rejoin_game, self.fixture_world['address'])
     cl_1._rejoin_game(self.fixture_world['address'])

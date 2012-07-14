@@ -1,149 +1,73 @@
-import eventlet
+import logging
 
-from zombie import crypt
-from zombie import event
-from zombie import hooks
-from zombie import net
-from zombie import node
-from zombie import shared
-from zombie.mod import accounts
-from zombie.mod import commands
-from zombie.mod import location
+from zombie import db
+from zombie import model
 
 
-class World(event.EventEmitter):
-  def __init__(self, name, rsa_priv=None, rsa_pub=None, dsa_priv=None,
-               dsa_pub=None, *args, **kw):
-    super(World, self).__init__(*args, **kw)
-    self.id = name
-    self.name = name
-    self.rsa_priv = rsa_priv
-    self.rsa_pub = rsa_pub
-    self.dsa_priv = dsa_priv
-    self.dsa_pub = dsa_pub
-    self.pulses_per_second = 10
+class World(object):
+  """Handle the tasks a world must handle. So heavy is this burden.
 
-  @classmethod
-  def generate(cls, name):
-    rsa_priv = crypt.PrivateCrypterKey.generate(name)
-    dsa_priv = crypt.PrivateSignerKey.generate(name)
-    return cls.load(name)
+  A world is in charge of a few things:
+    - (x) Providing addresses for locations (lookup_location)
+    - (x) Providing a default location for new users (default_location)
+    - ( ) Keeping track of the locations of all users (accept_move)
+  """
 
-  @classmethod
-  def load(cls, name):
-    rsa_priv = crypt.PrivateCrypterKey.load(name)
-    rsa_pub = crypt.PublicEncrypterKey.load(name)
-    dsa_priv = crypt.PrivateSignerKey.load(name)
-    dsa_pub = crypt.PublicVerifierKey.load(name)
+  def __init__(self, location_db, user_db):
+    self.location_db = location_db
+    self.user_db = user_db
 
-    return cls(name=name, rsa_priv=rsa_priv, rsa_pub=rsa_pub,
-               dsa_priv=dsa_priv, dsa_pub=dsa_pub)
+  def cmd_lookup_location(self, ctx, location_id):
+    return ctx.reply({location_id: self.location_db.get(location_id)})
 
-  def init(self):
-    # load everything
-    # EVERYTHING
-    # pretend these are pluggable hooks
-    init_hooks = self._get_init_hooks()
-    for f in init_hooks:
-      f()
+  def cmd_default_location(self, ctx):
+    return self.cmd_lookup_location(ctx, 'default')
 
-    # self.load_objects()
+  def cmd_last_location(self, ctx, user_id):
+    """Get the last location for the given user and return a join token."""
+    last_location_id = self.user_db.last_location(user_id)
+    location_ref = self.location_db.get(last_location_id)
+    o = {'address': location_ref.address,
+         'join_token': {'user_id': user_id,
+                        'location_id': last_location_id,
+                        'from_id': last_location_id,
+                        }
+         }
+    return ctx.reply(o)
 
-  def _get_init_hooks(self):
-    return [self._init_hooks,
-            #self._init_bodies,
-            #self._init_room_reset, # reset all rooms
-            #self._init_inform,
-            #self._init_settings,
-            #self._init_externals,
-            #self._init_actions,
-            #self._init_events,
-            self._init_location,
-            self._init_accounts,
-            self._init_commands,
-            #self._init_items,
-            #self._init_aliases,
-            #self._init_time,
-            #self._init_help,
-            #self._init_scripts
-            ]
+  def cmd_update_user_location(self, ctx, join_token):
+    # verify the token is valid
+    # verify the token is for the location that is sending it
+    join_token_ref = model.JoinToken.from_dict(join_token)
+    user_ref = self.user_db.get(join_token_ref.user_id)
+    user_ref.last_location = join_token_ref.location_id
+    self.user_db.set(join_token_ref.user_id, user_ref)
+    return ctx.reply({'result': 'ok'})
 
-  def _init_hooks(self):
-    pass
-
-  def _init_accounts(self):
-    hooks.add('pre_message', accounts.authenticate, 0)
-    hooks.add('method_register', accounts.register)
-
-  def _init_commands(self):
-    hooks.add('method_spawn', commands.spawn)
-
-  def _init_location(self):
-    hooks.add('world_default_location', location.default_location)
-
-    #for loc in location.list_all():
-    #  def _load_loc(loc):
-    #    loc_ref = location.Location.load(loc)
-    #    s = net.Server(loc_ref)
-    #    l = shared.pool.spawn(s.listen, loc_ref.laddress)
-    #    p = shared.pool.spawn(s.publish, loc_ref.paddress)
-
-    #  shared.pool.spawn(_load_loc, loc)
-
-  def authenticate(self, ctx, parsed, msg, sig):
-    return accounts.authenticate(ctx, parsed, msg, sig)
-
-  def handle(self, ctx, parsed, msg, sig):
-    ctx['world'] = self
-
-    # authenticate
-    authenticated = self.authenticate(ctx, parsed, msg, sig)
-    if not authenticated:
-      raise exception.Error('not authenticated')
-
-    # handle command
-    if parsed.get('method') in self._cmds:
-      self._cmds[parsed.get('method')](ctx, parsed, msg, sig)
-
-  def cmd_authorize_token(self, ctx, parsed):
-    """Client is requesting a new auth token
-
-    Request:
-      {uuid: <uuid>,
-       method: 'auth_token',
-       token: (#({id: <character_id>,
-                  timestamp: <timestamp>,
-                  dsa_pub: <dsa_pub>}),
-               character_sig)
-       }
-
-    Response:
-      {uuid: <uuid>,
-       auth_token: (#(#({id: <character_id>,
-                         timestamp: <timestamp>,
-                         dsa_pub: <dsa_pub>),
-                        character_sig),
-                      world_sig)
-       }
-    """
-
-    # TODO(termie): verify that timestamp is recent
-    token_str = parsed.get('token')[0]
-    token_sig = parsed.get('token')[1]
-    token = util.loads(token_str)
-
-    verify_key = accounts.verify_key_for(token['id'])
-    if not verify_key.verify(token_str, token_sig):
-      raise exception.Error('invalid sig')
-
-    auth_token_str = util.dumps(parsed.get('token'))
-    auth_token_sig = self.dsa_priv.sign(auth_token_str)
-    return {'auth_token': (auth_token_str, auth_token_sig)}
-
-  def world_loop(self):
-    while True:
-      eventlet.sleep(1 / self.pulses_per_second)
+  def cmd_make_join_token(self, ctx, user_id, from_id, location_id):
+    # TODO(termie): verify that the locations connect
+    location_ref = self.location_db.get(location_id)
+    token = model.JoinToken.from_dict({'user_id': user_id,
+                                       'from_id': from_id,
+                                       'location_id': location_id})
+    logging.debug('BEFORE WORLD_JOIN')
+    ctx.reply({'address': location_ref.address,
+               'join_token': token.to_dict()})
+    logging.debug('AFTER WORLD_JOIN')
 
 
-class WorldNode(node.AuthenticatedNode):
-  pass
+class WorldUserDatabase(db.Kvs):
+  """Interface for accessing user data."""
+  deserialize = model.User.from_dict
+
+  def last_location(self, user_id):
+    """Return the last location for a given user_id."""
+    user_ref = self.get(user_id)
+    return user_ref.last_location
+
+
+class WorldLocationDatabase(db.Kvs):
+  """Interface for accessing location data."""
+  deserialize = model.Location.from_dict
+
+

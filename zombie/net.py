@@ -1,487 +1,230 @@
+import json
 import logging
+import time
 import uuid
 
-import eventlet
-from eventlet import event as e_event
-from eventlet.green import zmq
+import gflags
+import zmq
+from eventlet import queue
+from eventlet import timeout
 
-from zombie import context
-from zombie import crypt
-from zombie import hooks
 from zombie import shared
-from zombie import util
 
 
-class Server(object):
-  """Servers handle normal connections and publishing connections."""
+FLAGS = gflags.FLAGS
+gflags.DEFINE_float('sleep_time', 0.001,
+                    'how long to wait in event loops')
 
-  def __init__(self, proxy):
-    self.proxy = proxy
-    self._psock = None
-    self._paddress = None
-    self._csock = None
-    self._caddress = None
 
-  def init_control(self, address):
-    """Set up the control socket."""
-    sock = shared.zctx.socket(zmq.XREP)
-    sock.bind(address)
-    self._caddress = address
-    self._csock = sock
 
-  def init_pubsub(self, address):
-    """Set up the pubsub socket."""
-    sock = shared.zctx.socket(zmq.PUB)
-    sock.bind(address)
-    self._paddress = address
-    self._psock = sock
-    self._pkey = crypt.SessionKey.generate('pubsub_' + uuid.uuid4().hex)
-    self.proxy.on('notify', self._handle_notify)
+class ServeContext(dict):
+  # ident
+  # sock
+  def __init__(self, stream, ident, data):
+    super(ServeContext, self).__init__(**json.loads(data))
+    self['ident'] = ident
+    self.stream = stream
 
-  def control_loop(self):
-    while True:
-      msg_parts = self._csock.recv_multipart()
-      ident = msg_parts.pop(0)
-      ident_b64 = util.b64_encode(ident)
-      c = context.Context(ident=ident,
-                          ident_b64=ident_b64,
-                          sock=self._csock,
-                          pool=shared.pool)
-      rv = shared.pool.spawn(self._handle_control, c, msg_parts)
-      eventlet.sleep(0.1)
-
-  def _handle_notify(self, msg):
-    self._psock.send_multipart([msg, self._sign(msg)])
-
-  def _handle_control(self, ctx, msg_parts):
-    logging.info('routing: %s, %s', *msg_parts)
-
-    # special case to request pubkey, everything else will be encrypted
-    if msg_parts[0] == 'dsa_pub':
-      self._cmd_dsa_pub(ctx)
-
-    msg, sig = msg_parts
-
-    # if we have a session first try to decrypt the message using that key
+  def reply(self, msg, done=True):
     try:
-      session_key = crypt.SessionKey.load(self.proxy.name + ctx['ident_b64'])
-    except Exception:
-      session_key = None
+      msg = msg.to_dict()
+    except AttributeError:
+      pass
+    envelope = {'msg_id': self['msg_id'],
+                'cmd': 'reply',
+                'data': msg}
+    msg_data = json.dumps(envelope)
+    self.stream.sock.send_multipart([self['ident'], msg_data])
+    if done:
+      self.end_reply()
 
-    if not session_key:
-      parsed = util.deserialize(msg)
-      logging.debug('parsed (unencrypted): %s', parsed)
-      if parsed.get('method') != 'session_start':
-        raise exception.Error('no session key found')
-      return self._cmd_session_start(ctx, parsed)
+  def reply_exc(self, exc, done=True):
+    envelope = {'msg_id': self['msg_id'],
+                'cmd': 'reply',
+                'exc': str(exc),
+                'data': {}}
+    msg_data = json.dumps(envelope)
+    self.stream.sock.send_multipart([self['ident'], msg_data])
+    if done:
+      self.end_reply()
 
-    logging.info('session key found')
+  def end_reply(self):
+    msg = {'msg_id': self['msg_id'],
+           'cmd': 'end_reply'}
+    msg_data = json.dumps(msg)
+    self.stream.sock.send_multipart([self['ident'], msg_data])
+
+  def send(self, msg, *args):
+    logging.debug('SSEND> %s', [msg % args])
+    self.stream.sock.send_multipart([msg % args])
+
+
+class ConnectContext(dict):
+  # ident
+  # sock
+  def __init__(self, stream, data):
+    super(ConnectContext, self).__init__(**json.loads(data))
+    self.stream = stream
+
+  def reply(self, msg, done=True):
     try:
-      decrypted = session_key.decrypt(msg)
+      msg = msg.to_dict()
+    except AttributeError:
+      pass
+    envelope = {'msg_id': self['msg_id'],
+                'cmd': 'reply',
+                'data': msg}
+    msg_data = json.dumps(envelope)
+    self.stream.sock.send_multipart([msg_data])
+    if done:
+      self.end_reply()
+
+  def end_reply(self):
+    msg = {'msg_id': self['msg_id'],
+           'cmd': 'end_reply'}
+    msg_data = json.dumps(msg)
+    self.stream.sock.send_multipart([msg_data])
+
+  def send_cmd(self, cmd, data=None):
+    """Send command to the remote server and feed replies back to the caller.
+
+    This produces a generator to allow for multiple responses to a single
+    call. If an exception is returned it will be raised.
+    """
+    msg = {'msg_id': uuid.uuid4().hex,
+           'cmd': cmd,
+           'args': data or {},
+           }
+    msg_data = json.dumps(msg)
+
+    q = self.stream.register_channel(msg['msg_id'])
+
+    self.stream.sock.send_multipart([msg_data])
+    with timeout.Timeout(3):
+      try:
+        while True:
+          time.sleep(FLAGS.sleep_time)
+          if not q.empty():
+            rv = q.get(timeout=5)
+            if rv == StopIteration:
+              break
+            if 'exc' in rv:
+              raise RemoteError(rv['exc'])
+            yield rv['data']
+      except queue.Empty:
+        pass
+
+    self.stream.deregister_channel(msg['msg_id'])
+
+  def send(self, msg, *args):
+    logging.debug('CSEND> %s', [msg % args])
+    self.stream.sock.send_multipart([msg % args])
+
+
+class Stream(object):
+  """Handles data coming in to a server or from a server.
+
+  The basic operations as a server:
+    - Listen on a given port
+    - On new messages
+      - Create a ServeContext (used by the handler to direct any replies)
+      - Decide what to do with the message based on the command.
+        - Two special cases of command are 'reply' and 'end_reply' which route
+          messages back to the calling function and do what you would expect.
+
+
+  """
+
+  def __init__(self, handler):
+    self.handler = handler
+    self._reply_waiters = {}
+
+  def serve(self, address):
+    """Listen on an XREP socket."""
+    logging.debug('SERVE %s', address)
+    self.sock = shared.zctx.socket(zmq.XREP)
+    self.sock.bind(address)
+    while not self.sock.closed:
+      time.sleep(FLAGS.sleep_time)
+      try:
+        parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
+        logging.debug('<SRECV %s', parts)
+        ident = parts.pop(0)
+        ctx = ServeContext(stream=self, ident=ident, data=parts[0])
+
+        # special case replies
+        if ctx['cmd'] == 'reply':
+          shared.pool.spawn(self.handle_reply, ctx)
+        elif ctx['cmd'] == 'end_reply':
+          shared.pool.spawn(self.handle_end_reply, ctx)
+        else:
+          shared.pool.spawn(self.handle_cmd, ctx)
+
+      except zmq.ZMQError as e:
+        if e.errno == zmq.EAGAIN:
+          pass
+
+  def connect(self, address, callback):
+    """Connect with an XREQ socket."""
+    logging.debug('CONNECT %s', address)
+    self.sock = shared.zctx.socket(zmq.XREQ)
+    self.sock.connect(address)
+
+    shared.pool.spawn(callback, ConnectContext(stream=self, data='{}'))
+    while not self.sock.closed:
+      time.sleep(FLAGS.sleep_time)
+      try:
+        parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
+        logging.debug('<CRECV %s', parts)
+        ctx = ConnectContext(stream=self, data=parts[0])
+
+        # special case replies
+        if ctx['cmd'] == 'reply':
+          shared.pool.spawn(self.handle_reply, ctx)
+        elif ctx['cmd'] == 'end_reply':
+          shared.pool.spawn(self.handle_end_reply, ctx)
+        else:
+          shared.pool.spawn(self.handle_cmd, ctx)
+
+      except zmq.ZMQError as e:
+        if e.errno == zmq.EAGAIN:
+          pass
+
+  def close(self):
+    self.sock.close()
+
+  def register_channel(self, msg_id):
+    q = queue.LightQueue()
+    self._reply_waiters[msg_id] = q
+    return q
+
+  def deregister_channel(self, msg_id):
+    del self._reply_waiters[msg_id]
+
+  def get_channel(self, msg_id):
+    return self._reply_waiters[msg_id]
+
+  def handle_reply(self, ctx):
+    """Put responses to a message on our queue."""
+    if ctx['msg_id'] not in self._reply_waiters:
+      raise Exception('no such reply waiter: %s' % ctx['msg_id'])
+    reply_waiter = self._reply_waiters[ctx['msg_id']]
+    reply_waiter.put(ctx)
+
+  def handle_end_reply(self, ctx):
+    """End responses to a message on our queue."""
+    if ctx['msg_id'] not in self._reply_waiters:
+      raise Exception('no such reply waiter: %s' % ctx['msg_id'])
+    reply_waiter = self._reply_waiters[ctx['msg_id']]
+    reply_waiter.put(StopIteration)
+
+  def handle_cmd(self, ctx):
+    """Attempt to call a method on the handler."""
+    try:
+      f = getattr(self.handler, 'cmd_%s' % ctx['cmd'])
+      f(ctx, **dict((str(k), v) for k, v in ctx['args'].iteritems()))
     except Exception as e:
-      raise exception.Error('invalid session')
+      logging.exception('EXC in handle_cmd\ncmd_%s(**%s)', ctx['cmd'], ctx['args'])
+      ctx.reply_exc(e)
 
-    ctx['session_key'] = session_key
-
-    try:
-      parsed = util.deserialize(decrypted)
-    except Exception as e:
-      raise exception.Error('no message found')
-
-    logging.debug('parsed: %s', parsed)
-    if parsed.get('method') == 'subscribe_start':
-      if self.proxy.authenticate(ctx, parsed, msg, sig):
-        return self._cmd_subscribe_start(ctx, parsed)
-
-    try:
-      return self.proxy.handle(ctx, parsed, msg, sig)
-    except Exception as e:
-      logging.exception('in proxy.handle')
-      raise exception.Error('unexpected error')
-
-  def _cmd_dsa_pub(self, ctx):
-    logging.debug('DSA_PUB')
-    msg = str(self.proxy.dsa_pub)
-    ctx.send(msg, self._sign(msg))
-
-  def _cmd_subscribe_start(self, ctx, parsed):
-    logging.debug('new subscriber')
-    msg = util.serialize({'subscribe_key': str(self._pkey),
-                          'subscribe_address': str(self._paddress),
-                          'uuid': parsed['uuid'],
-                          })
-    msg = ctx['session_key'].encrypt(msg)
-    sig = self._sign(msg)
-    ctx.send(msg, sig)
-
-  def _cmd_session_start(self, ctx, parsed):
-    """The client sent us its pubkey, send it an encrypted session key."""
-    logging.debug('starting new session')
-    session_key = crypt.SessionKey.generate(self.proxy.name + ctx['ident_b64'])
-    rsa_pub = parsed.get('rsa_pub')
-    encrypter = crypt.PublicEncrypterKey.from_key(ctx['ident_b64'],
-                                                  parsed.get('rsa_pub'))
-    out = {'session_key': str(session_key)}
-    out['uuid'] = 0
-    msg = util.serialize(out)
-    logging.debug('serialized, length: %s', len(msg))
-    msg = encrypter.encrypt(msg)
-    sig = self._sign(msg)
-    ctx.send(msg, sig)
-    logging.debug('sent session_start response')
-
-  def _sign(self, s):
-    return self.proxy.dsa_priv.sign(s)
-
-
-class NodeServer(object):
-  """Servers handle normal connections and publishing connections."""
-
-  def __init__(self, node):
-    self.node = node
-    self._psock = None
-    self._paddress = None
-    self._csock = None
-    self._caddress = None
-
-  def init_control(self, address):
-    """Set up the control socket."""
-    sock = shared.zctx.socket(zmq.XREP)
-    sock.bind(address)
-    self._caddress = address
-    self._csock = sock
-
-  def control_loop(self):
-    while True:
-      msg_parts = self._csock.recv_multipart()
-      ident = msg_parts.pop(0)
-      ident_b64 = util.b64_encode(ident)
-      c = context.Context(ident=ident,
-                          client_id=ident_b64,
-                          sock=self._csock)
-      rv = shared.pool.spawn(self._handle_control, c, msg_parts)
-      eventlet.sleep(0.1)
-
-  def _handle_control(self, ctx, msg_parts):
-    logging.info('server routing: %s, %s', *msg_parts)
-
-    msg, sig = msg_parts
-
-    # parse the message if we can
-    try:
-      parsed = util.loads(msg)
-    except Exception:
-      parsed = {}
-
-    try:
-      ctx['node'] = self.node
-      self.node.handle(ctx, parsed, msg, sig)
-    except Exception as e:
-      logging.exception('yikes!')
-      ctx.reply(parsed, dict(error=str(e)))
-
-
-class NodeClient(object):
-  def __init__(self, node):
-    self._clooping = False
-    self._csock = None
-    self._caddress = None
-    self._plooping = False
-    self._psock = None
-    self._paddress = None
-    self._waiters = {}
-    self._connected = False
-    self._session_key = None
-    self.node = node
-
-  def connect_control(self, address, name):
-    sock = shared.zctx.socket(zmq.XREQ)
-    sock.connect(address)
-
-    self._csock = sock
-    self._caddress = address
-    self._cname = name
-
-    # Start our session
-    rv = self.rpc('session_start',
-                  signed_rsa_pub=self.node.signed_rsa_pub,
-                  uuid=0)
-    session_key = self.node.rsa_priv.decrypt(rv['session_key'])
-    self._session_key = crypt.SessionKey.from_key('session', session_key)
-
-  def connect_pubsub(self):
-    # We get the subscription address via the main connection
-    rv = self.rpc('subscribe_start')
-    self._skey = crypt.SessionKey.from_key('subscribe', rv['subscribe_key'])
-    self._paddress = str(rv['subscribe_address'])
-
-    zctx = shared.zctx
-    sock = zctx.socket(zmq.SUB)
-    sock.setsockopt(zmq.SUBSCRIBE, '')
-    sock.connect(self._paddress)
-    self._psock = sock
-    logging.debug('subscribed to %s', self._paddress)
-
-  def rpc(self, method, **kw):
-    logging.debug('rpc: %s', method)
-    msg = {'method': method}
-    msg['uuid'] = uuid.uuid4().hex
-    msg.update(kw)
-    ev = e_event.Event()
-    self._wait_for(msg['uuid'], ev)
-    self.sign_and_send(msg)
-
-    # for the clientloop to run while we are waiting
-    def _forceloop():
-      while not ev.ready():
-        self.control_loop(once=True)
-
-    loop = shared.pool.spawn(_forceloop)
-    loop.wait()
-    rv = ev.wait()
-    logging.debug('got response for %s', method)
-    return rv
-
-  def sign_and_send(self, msg):
-    msg['self'] = self.node.name
-    msg = util.dumps(msg)
-    logging.debug('client sending (raw): %s', msg)
-    if self._session_key:
-      msg = self._session_key.encrypt(msg)
-    sig = self._sign(msg)
-    logging.debug('client sending (signed): %s, %s', msg, sig)
-    return self._csock.send_multipart([msg, sig])
-
-  def control_loop(self, once=False):
-    while True:
-      if self._clooping:
-        eventlet.sleep(0.1)
-        return
-      self._clooping = True
-      if self._csock:
-        msg = self._crecv()
-        if msg:
-          self.node.handle(self, msg)
-      self._clooping = False
-      if once:
-        return
-      eventlet.sleep(0.1)
-
-  def pubsub_loop(self, once=False):
-    while True:
-      if self._plooping:
-        eventlet.sleep(0.1)
-        return
-      self._plooping = True
-      if self._psock:
-        msg = self._srecv()
-        if msg:
-          self.node.handle(self, msg)
-      self._plooping = False
-      if once:
-        return
-      eventlet.sleep(0.1)
-
-  def verify(self, s, sig):
-    return self.node.verify_trusted_sig(s, self._cname, sig)
-    #return self._server_key.verify(s, sig)
-
-  def _wait_for(self, key, ev):
-    self._waiters[key] = ev
-
-  def _crecv(self):
-    logging.debug('_crecv(%s)', self._caddress)
-    if not self._csock:
-      return
-    msg, sig = self._csock.recv_multipart()
-    logging.debug('ctrl_msg %s', msg)
-    valid = self.verify(msg, sig)
-    if not valid:
-      logging.debug('invalid sig (%s): %s', sig, msg)
-      return
-
-    if self._session_key:
-      msg = self._session_key.decrypt(msg)
-    #else:
-    #  msg = self.node.rsa_priv.decrypt(msg)
-
-    msg = util.loads(msg)
-    logging.debug('ctrl_msg(decrypt): %s', msg)
-    # Check whether this is a response to an rpc, if it is
-    # don't trigger default handlers
-    if msg['uuid'] in self._waiters:
-      self._waiters[msg['uuid']].send(msg)
-      del self._waiters[msg['uuid']]
-      return
-
-    return msg
-
-  def _srecv(self):
-    logging.debug('_srecv(%s)', self._paddress)
-    if not self._psock:
-      return
-
-    msg, sig = self._psock.recv_multipart()
-    logging.debug('sub_msg %s', msg)
-    valid = self.verify(msg, sig)
-    if not valid:
-      return
-
-    msg = self._subscribe_key.decrypt(msg)
-    msg = util.loads(msg)
-    return msg
-
-  def _sign(self, s):
-    return self.node.dsa_priv.sign(s)
-
-
-class Client(object):
-  def __init__(self, proxy):
-    self._clooping = False
-    self._csock = None
-    self._caddress = None
-    self._plooping = False
-    self._psock = None
-    self._paddress = None
-    self._waiters = {}
-    self._connected = False
-    self._session_key = None
-    self.proxy = proxy
-
-  def connect_control(self, address):
-    sock = shared.zctx.socket(zmq.XREQ)
-    sock.connect(address)
-
-    self._csock = sock
-    self._caddress = address
-
-    # Get the server's signing key to verify everything else
-    # TODO(termie): obviously we would expect to have this on file already
-    #               if we trusted the server
-    #sock.send_multipart(['dsa_pub', self._sign('dsa_pub')])
-    #dsa_pub, sig = sock.recv_multipart()
-    #dsa_pub_key = crypt.PublicVerifierKey.from_key(address, dsa_pub)
-    #self._server_key = dsa_pub_key
-
-    # Start our session
-    rv = self.rpc('session_start', rsa_pub=str(self.proxy.rsa_pub), uuid=0)
-    self._session_key = crypt.SessionKey.from_key('session', rv['session_key'])
-
-  def connect_pubsub(self):
-    # We get the subscription address via the main connection
-    rv = self.rpc('subscribe_start')
-    self._skey = crypt.SessionKey.from_key('subscribe', rv['subscribe_key'])
-    self._paddress = str(rv['subscribe_address'])
-
-    zctx = shared.zctx
-    sock = zctx.socket(zmq.SUB)
-    sock.setsockopt(zmq.SUBSCRIBE, '')
-    sock.connect(self._paddress)
-    self._psock = sock
-    logging.debug('subscribed to %s', self._paddress)
-
-  def rpc(self, method, **kw):
-    logging.debug('rpc: %s', method)
-    msg = {'method': method}
-    msg['uuid'] = uuid.uuid4().hex
-    msg.update(kw)
-    ev = e_event.Event()
-    self._wait_for(msg['uuid'], ev)
-    self.sign_and_send(msg)
-
-    # for the clientloop to run while we are waiting
-    def _forceloop():
-      while not ev.ready():
-        self.control_loop(once=True)
-
-    shared.pool.spawn_n(_forceloop)
-    rv = ev.wait()
-    logging.debug('got response for %s', method)
-    return rv
-
-  def sign_and_send(self, msg):
-    msg['self'] = self.proxy.name
-    msg = util.dumps(msg)
-    logging.debug('sending: %s', msg)
-    if self._session_key:
-      msg = self._session_key.encrypt(msg)
-    sig = self._sign(msg)
-    return self._csock.send_multipart([msg, sig])
-
-  def control_loop(self, once=False):
-    while True:
-      if self._clooping:
-        eventlet.sleep(0.1)
-        return
-      self._clooping = True
-      if self._csock:
-        msg = self._crecv()
-        if msg:
-          self.proxy.handle(self, msg)
-      self._clooping = False
-      if once:
-        return
-      eventlet.sleep(0.1)
-
-  def pubsub_loop(self, once=False):
-    while True:
-      if self._plooping:
-        eventlet.sleep(0.1)
-        return
-      self._plooping = True
-      if self._psock:
-        msg = self._srecv()
-        if msg:
-          self.proxy.handle(self, msg)
-      self._plooping = False
-      if once:
-        return
-      eventlet.sleep(0.1)
-
-  def verify(self, s, sig):
-    return self._server_key.verify(s, sig)
-
-  def _wait_for(self, key, ev):
-    self._waiters[key] = ev
-
-  def _crecv(self):
-    logging.debug('_crecv(%s)', self._caddress)
-    if not self._csock:
-      return
-    msg, sig = self._csock.recv_multipart()
-    logging.debug('ctrl_msg %s', msg)
-    valid = self.verify(msg, sig)
-    if not valid:
-      return
-
-    if self._session_key:
-      msg = self._session_key.decrypt(msg)
-    else:
-      msg = self.proxy.rsa_priv.decrypt(msg)
-
-    msg = util.loads(msg)
-    logging.debug('ctrl_msg(decrypt): %s', msg)
-    if msg['uuid'] in self._waiters:
-      self._waiters[msg['uuid']].send(msg)
-      del self._waiters[msg['uuid']]
-
-    return msg
-
-  def _srecv(self):
-    logging.debug('_srecv(%s)', self._paddress)
-    if not self._psock:
-      return
-
-    msg, sig = self._psock.recv_multipart()
-    logging.debug('sub_msg %s', msg)
-    valid = self.verify(msg, sig)
-    if not valid:
-      return
-
-    msg = self._subscribe_key.decrypt(msg)
-    msg = util.loads(msg)
-    return msg
-
-  def _sign(self, s):
-    return self.proxy.dsa_priv.sign(s)
 

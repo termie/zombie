@@ -4,3 +4,9 @@ class Error(Exception):
 
 def wrap(e):
   return Error(str(e))
+
+
+class RemoteError(Error):
+  pass
+
+
