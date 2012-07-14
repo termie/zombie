@@ -146,10 +146,12 @@ class BasicTestCase(test.TestCase):
 
   fixture_loc_a = {
       'users': {},
+      'exits': {'east': 'loc_b'},
       }
 
   fixture_loc_b = {
       'users': {},
+      'exits': {'east': 'loc_a'},
       }
 
   fixture_bot_1 = {
@@ -176,12 +178,14 @@ class BasicTestCase(test.TestCase):
   def load_loc_a(self, fixture):
     self.loc_a = location.Location(
         user_db=location.LocationUserDatabase(**fixture['users']),
-        location_id='loc_a')
+        location_id='loc_a',
+        exits=fixture['exits'])
 
   def load_loc_b(self, fixture):
     self.loc_b = location.Location(
         user_db=location.LocationUserDatabase(**fixture['users']),
-        location_id='loc_b')
+        location_id='loc_b',
+        exits=fixture['exits'])
 
   def load_bot_1(self, fixture):
     self.bot_1 = client.User(**fixture)
@@ -209,7 +213,6 @@ class BasicTestCase(test.TestCase):
     return loc_b_stream
 
   def test_it(self):
-    debug.hub_blocking_detection(True, 0.5)
     world = self.spawn_world()
     loc_a = self.spawn_loc_a()
     loc_b = self.spawn_loc_b()
@@ -219,16 +222,31 @@ class BasicTestCase(test.TestCase):
     cl_1 = client.Client(self.bot_1)
     cl_2 = client.Client(self.bot_2)
 
-    #self.spawn(cl_1._rejoin_game, self.fixture_world['address'])
     cl_1._rejoin_game(self.fixture_world['address'])
     self.assert_(self.loc_a.user_db.get(self.bot_1.id))
-    cl_1._move_location('loc_b')
+
+    # look at loc_a and make sure things line up
+    rv = cl_1._look()
+    self.assert_(self.loc_b.id in rv['exits'].values())
+    self.assert_(self.bot_1.id in rv['users'])
+
+
+    cl_1._move_location(self.loc_b.id)
     self.assert_(not self.loc_a.user_db.get(self.bot_1.id))
     self.assert_(self.loc_b.user_db.get(self.bot_1.id))
+
+    rv = cl_1._look()
+    self.assert_(self.loc_a.id in rv['exits'].values())
+    self.assert_(self.bot_1.id in rv['users'])
+    self.assert_(self.bot_2.id not in rv['users'])
 
     cl_2._rejoin_game(self.fixture_world['address'])
     self.assert_(self.loc_b.user_db.get(self.bot_2.id))
 
+    rv = cl_1._look()
+    self.assert_(self.bot_2.id in rv['users'])
+
+
     rv = cl_1._look_at_other(self.bot_2.id)
-    self.assertEquals(rv[self.bot_2.id]['description'], self.bot_2.description)
+    self.assertEquals(rv['description'], self.bot_2.description)
 

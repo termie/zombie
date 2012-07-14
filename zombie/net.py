@@ -17,16 +17,14 @@ gflags.DEFINE_float('sleep_time', 0.001,
                     'how long to wait in event loops')
 
 
-
 class ServeContext(dict):
   """Context given to servers when clients send commands."""
 
-  # ident
-  # sock
   def __init__(self, stream, ident, data):
     super(ServeContext, self).__init__(**json.loads(data))
     self['ident'] = ident
     self.stream = stream
+    self.data = json.loads(data)
 
   def reply(self, msg, done=True):
     try:
@@ -95,10 +93,10 @@ class ServeContext(dict):
 
 class ConnectContext(dict):
   """Context given to clients when connected to servers."""
-  # ident
-  # sock
+
   def __init__(self, stream, data):
     super(ConnectContext, self).__init__(**json.loads(data))
+    self.data = json.loads(data)
     self.stream = stream
 
   def reply(self, msg, done=True):

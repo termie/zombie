@@ -16,7 +16,7 @@ class User(object):
 
   def cmd_look(self, ctx):
     """Somebody is looking at you, what do you tell them."""
-    ctx.reply({self.id: {'description': self.description}})
+    ctx.reply({'description': self.description})
 
 class Client(object):
   """Holds on to a user object and uses it to interact with the game.
@@ -97,6 +97,9 @@ class Client(object):
     look_rv = self.location.look_at_other(other_id)
     return look_rv
 
+  def _look(self):
+    return self.location.look()
+
   def cmd_look(self, ctx):
     return self.user.cmd_look(ctx)
 
@@ -131,6 +134,10 @@ class LocationClient(object):
                                          'new_location_id': new_location_id})
     move_rv = rv.next()
     return move_rv
+
+  def look(self):
+    rv = self.ctx.send_cmd('look')
+    return rv.next()
 
   def look_at_other(self, other_id):
     rv = self.ctx.send_cmd('look_at_other', {'other_id': other_id})
