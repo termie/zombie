@@ -230,6 +230,5 @@ class BasicTestCase(test.TestCase):
     self.assert_(self.loc_b.user_db.get(self.bot_2.id))
 
     rv = cl_1._look_at_other(self.bot_2.id)
-    raise rv
-    #self.assertEquals(rv[self.bot_1.id]['description'], self.bot_2.description)
+    self.assertEquals(rv[self.bot_2.id]['description'], self.bot_2.description)
 
