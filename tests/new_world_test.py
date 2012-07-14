@@ -229,4 +229,6 @@ class BasicTestCase(test.TestCase):
     cl_2._rejoin_game(self.fixture_world['address'])
     self.assert_(self.loc_b.user_db.get(self.bot_2.id))
 
-    cl_1._look_at_other(self.bot_2.id)
+    rv = cl_1._look_at_other(self.bot_2.id)
+    self.assertEquals(rv[self.bot_1.id]['description'], self.bot_2.description)
+
