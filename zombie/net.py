@@ -8,6 +8,7 @@ import zmq
 from eventlet import queue
 from eventlet import timeout
 
+from zombie import exception
 from zombie import shared
 
 
@@ -18,6 +19,8 @@ gflags.DEFINE_float('sleep_time', 0.001,
 
 
 class ServeContext(dict):
+  """Context given to servers when clients send commands."""
+
   # ident
   # sock
   def __init__(self, stream, ident, data):
@@ -58,8 +61,40 @@ class ServeContext(dict):
     logging.debug('SSEND> %s', [msg % args])
     self.stream.sock.send_multipart([msg % args])
 
+  def send_cmd(self, cmd, data=None):
+    """Send command to the connection and feed replies back to the caller.
+
+    This produces a generator to allow for multiple responses to a single
+    call. If an exception is returned it will be raised.
+    """
+    msg = {'msg_id': uuid.uuid4().hex,
+           'cmd': cmd,
+           'args': data or {},
+           }
+    msg_data = json.dumps(msg)
+
+    q = self.stream.register_channel(msg['msg_id'])
+
+    self.stream.sock.send_multipart([self['ident'], msg_data])
+    with timeout.Timeout(3):
+      try:
+        while True:
+          time.sleep(FLAGS.sleep_time)
+          if not q.empty():
+            rv = q.get(timeout=5)
+            if rv == StopIteration:
+              break
+            if 'exc' in rv:
+              raise exception.RemoteError(rv['exc'])
+            yield rv['data']
+      except queue.Empty:
+        pass
+
+    self.stream.deregister_channel(msg['msg_id'])
+
 
 class ConnectContext(dict):
+  """Context given to clients when connected to servers."""
   # ident
   # sock
   def __init__(self, stream, data):
@@ -74,6 +109,16 @@ class ConnectContext(dict):
     envelope = {'msg_id': self['msg_id'],
                 'cmd': 'reply',
                 'data': msg}
+    msg_data = json.dumps(envelope)
+    self.stream.sock.send_multipart([msg_data])
+    if done:
+      self.end_reply()
+
+  def reply_exc(self, exc, done=True):
+    envelope = {'msg_id': self['msg_id'],
+                'cmd': 'reply',
+                'exc': str(exc),
+                'data': {}}
     msg_data = json.dumps(envelope)
     self.stream.sock.send_multipart([msg_data])
     if done:
@@ -109,7 +154,7 @@ class ConnectContext(dict):
             if rv == StopIteration:
               break
             if 'exc' in rv:
-              raise RemoteError(rv['exc'])
+              raise exception.RemoteError(rv['exc'])
             yield rv['data']
       except queue.Empty:
         pass

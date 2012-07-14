@@ -64,9 +64,14 @@ class Location(object):
     logging.debug('AFTER LOC_MOVE')
     self.user_db.delete(user_id)
 
+  #def cmd_look(self, ctx):
+  #  return ctx.reply(self.data)
 
-  def cmd_look(self, ctx):
-    return ctx.reply(self.data)
+  def cmd_look_at_other(self, ctx, other_id):
+    other_ctx = self.user_db.get(other_id)
+    rv = other_ctx.send_cmd('look')
+    for x in rv:
+      ctx.reply(x)
 
 
 class LocationWorldClient(object):

@@ -9,9 +9,14 @@ from zombie import shared
 
 
 class User(object):
+  description = 'A user.'
+
   def __init__(self, id):
     self.id = id
 
+  def cmd_look(self, ctx):
+    """Somebody is looking at you, what do you tell them."""
+    ctx.reply({self.id: {'description': self.description}})
 
 class Client(object):
   """Holds on to a user object and uses it to interact with the game.
@@ -88,6 +93,13 @@ class Client(object):
     location = self._connect_to_location(address)
     location.join(join_token)
 
+  def _look_at_other(self, other_id):
+    look_rv = self.location.look_at_other(other_id)
+    return look_rv
+
+  def cmd_look(self, ctx):
+    return self.user.cmd_look(ctx)
+
 
 class LocationClient(object):
   """Interface to the various commands we might send to a location."""
@@ -119,6 +131,11 @@ class LocationClient(object):
                                          'new_location_id': new_location_id})
     move_rv = rv.next()
     return move_rv
+
+  def look_at_other(self, other_id):
+    rv = self.ctx.send_cmd('look_at_other', {'other_id': other_id})
+    return rv.next()
+
 
 
 class WorldClient(object):
