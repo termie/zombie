@@ -225,5 +225,6 @@ class BasicTestCase(test.TestCase):
     cl_1._move_location('loc_b')
     self.assert_(not self.loc_a.user_db.get(self.bot_1.id))
     self.assert_(self.loc_b.user_db.get(self.bot_1.id))
-    #time.sleep(1)
-    #cl_2._rejoin_game(self.fixture_world['address'])
+
+    cl_2._rejoin_game(self.fixture_world['address'])
+    self.assert_(self.loc_b.user_db.get(self.bot_2.id))
