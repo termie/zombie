@@ -64,7 +64,7 @@ class Context(dict):
     msg_data = json.dumps(msg)
     self._send(msg_data)
 
-  def send_cmd(self, cmd, data=None):
+  def send_cmd(self, cmd, data=None, noreply=False):
     """Send command to the connection and feed replies back to the caller.
 
     This produces a generator to allow for multiple responses to a single
@@ -75,7 +75,14 @@ class Context(dict):
            'args': data or {},
            }
     msg_data = json.dumps(msg)
+    if noreply:
+      self._send(msg_data)
+      return
 
+    return self._wait_for_response(msg, msg_data)
+
+
+  def _wait_for_response(self, msg, msg_data):
     q = self.stream.register_channel(msg['msg_id'])
 
     self._send(msg_data)
@@ -95,6 +102,7 @@ class Context(dict):
         pass
 
     self.stream.deregister_channel(msg['msg_id'])
+
 
   def route_cmd(self, other_id, cmd, data=None):
     package = {'msg_id': uuid.uuid4().hex, # NOTE(termie): not used?
@@ -182,6 +190,15 @@ class Stream(object):
         if e.errno == zmq.EAGAIN:
           pass
 
+  # TODO(termie): for now we are just doing poor man's broadcast by iterating
+  #               over connected clients
+  def serve_broadcast(self, address):
+    """Bind with an PUB socket."""
+    return
+    logging.debug('SERVE BROADCAST %s', address)
+    self.bsock = shard.zctx.socket(zmq.PUB)
+    self.bsock.bind(address)
+
   def connect(self, address, callback):
     """Connect with an XREQ socket."""
     logging.debug('CONNECT %s', address)
@@ -202,13 +219,47 @@ class Stream(object):
                              signer=self.handler,
                              msg_parts=parts)
 
-        # special case replies
+        # special case replies and events
         if ctx['cmd'] == 'reply':
           shared.pool.spawn(self.handle_reply, ctx)
         elif ctx['cmd'] == 'end_reply':
           shared.pool.spawn(self.handle_end_reply, ctx)
+        elif ctx['cmd'] == 'event':
+          logging.debug('HANDLE EVENT')
+          shared.pool.spawn(self.handle_event, ctx)
         else:
           shared.pool.spawn(self.handle_cmd, ctx)
+
+      except zmq.ZMQError as e:
+        if e.errno == zmq.EAGAIN:
+          pass
+
+  # TODO(termie): for now we are just doing poor man's broadcast by iterating
+  #               over connected clients
+  def connect_broadcast(self, address, callback):
+    return
+    logging.debug('CONNECT BROADCAST %s', address)
+    self.bsock = shared.zctx.socket(zmq.SUB)
+    self.bsock.setsockopt(zmq.SUBSCRIBE, '')
+    self.bsock.connect(address)
+
+    shared.pool.spawn(callback,
+                      ConnectContext(stream=self,
+                                     signer=self.handler,
+                                     msg_parts=['{}', None, None]))
+    while not self.sock.closed:
+      time.sleep(FLAGS.sleep_time)
+      try:
+        parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
+        logging.debug('<CBRECV %s', parts)
+        self.handler.verify(parts)
+        ctx = ConnectContext(stream=self,
+                             signer=self.handler,
+                             msg_parts=parts)
+
+        # special case replies
+        if ctx['cmd'] == 'event':
+          shared.pool.spawn(self.handle_event, ctx)
 
       except zmq.ZMQError as e:
         if e.errno == zmq.EAGAIN:
@@ -251,4 +302,13 @@ class Stream(object):
       logging.exception('EXC in handle_cmd\ncmd_%s(**%s)', ctx['cmd'], ctx['args'])
       ctx.reply_exc(e)
 
-
+  def handle_event(self, ctx):
+    """Attempt to call a method on the handler."""
+    try:
+      f = getattr(self.handler,
+                  'on_%s' % ctx['args']['topic'],
+                  getattr(self.handler, 'on_event'))
+      f(ctx, **dict((str(k), v) for k, v in ctx['args'].iteritems()))
+    except Exception as e:
+      logging.exception('EXC in handle_event\non_%s(**%s)',
+                        ctx['args']['topic'], ctx['args'])

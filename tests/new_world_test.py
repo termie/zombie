@@ -1,8 +1,12 @@
+import eventlet
+eventlet.monkey_patch()
+
 import time
 import logging
 import functools
 
 from eventlet import debug
+from eventlet import queue
 
 from zombie import client
 from zombie import location
@@ -127,6 +131,25 @@ class BaseTestCase(test.TestCase):
 #    shared.pool.waitall()
 #    self.assert_(callback_called[0])
 
+class EventQueue(object):
+  def __init__(self):
+    self.queues = {}
+
+  def __getitem__(self, key):
+    if key in self.queues:
+      return self.queues[key]
+    self.queues[key] = queue.LightQueue()
+    return self.queues[key]
+
+
+class TestUser(client.User):
+  def __init__(self, *args, **kw):
+    super(TestUser, self).__init__(*args, **kw)
+    self.events = EventQueue()
+
+  def on_event(self, ctx, topic, data):
+    self.events[topic].put(data)
+
 
 class BasicTestCase(test.TestCase):
   fixture_world = {
@@ -137,19 +160,27 @@ class BasicTestCase(test.TestCase):
                           'last_location': 'loc_b'},
                 },
       'locations': {'loc_a': {'id': 'loc_a',
+                              #'broadcast': 'ipc:///tmp/loc_a_bcast',
                               'address': 'ipc:///tmp/loc_a'},
                     'loc_b': {'id': 'loc_b',
+                              #'broadcast': 'ipc:///tmp/loc_b_bcast',
                               'address': 'ipc:///tmp/loc_b'},
                     },
       }
 
 
   fixture_loc_a = {
+      'id': 'loc_a',
+      'address': 'ipc:///tmp/loc_a',
+      #'broadcast': 'ipc:///tmp/loc_a_bcast',
       'users': {},
       'exits': {'east': 'loc_b'},
       }
 
   fixture_loc_b = {
+      'id': 'loc_b',
+      'address': 'ipc:///tmp/loc_b',
+      #'broadcast': 'ipc:///tmp/loc_b_bcast',
       'users': {},
       'exits': {'east': 'loc_a'},
       }
@@ -179,20 +210,24 @@ class BasicTestCase(test.TestCase):
   def load_loc_a(self, fixture):
     self.loc_a = location.Location(
         user_db=location.LocationUserDatabase(**fixture['users']),
-        location_id='loc_a',
+        location_id=fixture['id'],
+        address=fixture['address'],
+        #broadcast=fixture['broadcast'],
         exits=fixture['exits'])
 
   def load_loc_b(self, fixture):
     self.loc_b = location.Location(
         user_db=location.LocationUserDatabase(**fixture['users']),
-        location_id='loc_b',
+        location_id=fixture['id'],
+        address=fixture['address'],
+        #broadcast=fixture['broadcast'],
         exits=fixture['exits'])
 
   def load_bot_1(self, fixture):
-    self.bot_1 = client.User(**fixture)
+    self.bot_1 = TestUser(**fixture)
 
   def load_bot_2(self, fixture):
-    self.bot_2 = client.User(**fixture)
+    self.bot_2 = TestUser(**fixture)
 
   def spawn_world(self):
     world_stream = net.Stream(self.world)
@@ -203,6 +238,8 @@ class BasicTestCase(test.TestCase):
     loc_a_stream = net.Stream(self.loc_a)
     self.spawn(loc_a_stream.serve,
                self.fixture_world['locations']['loc_a']['address'])
+    #self.spawn(loc_a_stream.serve_broadcast,
+    #           self.fixture_world['locations']['loc_a']['broadcast'])
     self.loc_a._connect_to_world(self.fixture_world['address'])
     return loc_a_stream
 
@@ -210,6 +247,8 @@ class BasicTestCase(test.TestCase):
     loc_b_stream = net.Stream(self.loc_b)
     self.spawn(loc_b_stream.serve,
                self.fixture_world['locations']['loc_b']['address'])
+    #self.spawn(loc_b_stream.serve_broadcast,
+    #           self.fixture_world['locations']['loc_b']['broadcast'])
     self.loc_b._connect_to_world(self.fixture_world['address'])
     return loc_b_stream
 
@@ -227,6 +266,9 @@ class BasicTestCase(test.TestCase):
     cl_1._rejoin_game(self.fixture_world['address'])
     self.assert_(self.loc_a.user_db.get(self.bot_1.id))
 
+    joined_event = self.bot_1.events['joined'].get(timeout=2)
+    self.assertEquals(joined_event['user_id'], self.bot_1.id)
+
     # look at loc_a and make sure things line up
     rv = cl_1._look()
     self.assert_(self.loc_b.id in rv['exits'].values())
@@ -237,6 +279,10 @@ class BasicTestCase(test.TestCase):
     self.assert_(not self.loc_a.user_db.get(self.bot_1.id))
     self.assert_(self.loc_b.user_db.get(self.bot_1.id))
 
+    joined_event = self.bot_1.events['joined'].get(timeout=2)
+    self.assertEquals(joined_event['user_id'], self.bot_1.id)
+
+
     # check out the new location
     rv = cl_1._look()
     self.assert_(self.loc_a.id in rv['exits'].values())
@@ -246,6 +292,9 @@ class BasicTestCase(test.TestCase):
     # bring bot 2 into the game
     cl_2._rejoin_game(self.fixture_world['address'])
     self.assert_(self.loc_b.user_db.get(self.bot_2.id))
+
+    joined_event = self.bot_1.events['joined'].get(timeout=2)
+    self.assertEquals(joined_event['user_id'], self.bot_2.id)
 
     # look again and verify that bot 2 shows up
     rv = cl_1._look()

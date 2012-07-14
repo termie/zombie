@@ -1,4 +1,5 @@
 import logging
+import time
 
 from eventlet import event
 
@@ -20,11 +21,13 @@ class Location(object):
   """
   description = 'A location.'
 
-  def __init__(self, user_db, location_id, exits):
+  def __init__(self, user_db, location_id, exits, address): #, broadcast):
     self.user_db = user_db
     self.location_id = location_id
     self.id = location_id
     self.exits = exits
+    self.address = address
+    #self.broadcast = broadcast
     #self.keys = Keystore()
 
   def verify(self, msg_parts):
@@ -45,6 +48,31 @@ class Location(object):
     self.world = LocationWorldClient(self, world_context)
     return self.world
 
+  def broadcast(self, topic, data):
+    logging.debug('BROADCAST %s: %s', topic, data)
+    evt = {'topic': topic,
+           'data': data}
+    for ctx in self.user_db.values():
+      ctx.send_cmd('event', data=evt, noreply=True)
+
+
+  def _location_to_direction(self, from_id):
+    for k, v in self.exits.iteritems():
+      if v == from_id:
+        return k
+
+  def broadcast_joined(self, user_id, from_id):
+    direction = self._location_to_direction(from_id)
+
+    if direction:
+      msg = '%s entered from the %s.' % (user_id, direction)
+    else:
+      msg = '%s rejoined.' % user_id
+    self.broadcast('joined', {'user_id': user_id,
+                              'from_id': from_id,
+                              'message': msg})
+
+
   def cmd_join(self, ctx, join_token):
     """Handle a user trying to join this location.
 
@@ -55,12 +83,17 @@ class Location(object):
     join_token_ref = model.JoinToken.from_dict(join_token)
     self.world.update_user_location(join_token)
     ctx.reply({'result': 'ok'})
+    logging.debug('AFTER JOIN REPLY')
 
     # Add the user to our local db
     self.user_db.set(join_token_ref.user_id, ctx)
 
     # Announce the user's entrance, if applicable.
+    # TODO(termie): possibly should provide some original contect
+    #               to verify the action causing this broadcast
+    self.broadcast_joined(ctx.caller_id, join_token['from_id'])
     #self.broadcast_joined(ctx.username, join_token['from_id'])
+    time.sleep(0.2)
 
   def cmd_move(self, ctx, user_id, new_location_id):
     """Provide the user with a join_token for the new location."""
@@ -92,11 +125,12 @@ class Location(object):
     for x in rv:
       ctx.reply(x)
 
-  def cmd_look_at_other(self, ctx, other_id):
-    other_ctx = self.user_db.get(other_id)
-    rv = other_ctx.send_cmd('look')
-    for x in rv:
-      ctx.reply(x)
+  def cmd_interact(self, ctx, other_name, verb):
+    """Interact with the location.
+
+    In most cases these interactions will be with with items that are not
+    explicitly visible but are described in the room's description.
+    """
 
 
 class LocationWorldClient(object):

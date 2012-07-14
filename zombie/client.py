@@ -19,6 +19,12 @@ class User(object):
     """Somebody is looking at you, what do you tell them."""
     ctx.reply({'description': self.description})
 
+  def cmd_tell(self, ctx, message):
+    pass
+
+  def on_event(self, ctx, topic, data):
+    pass
+
 class Client(object):
   """Holds on to a user object and uses it to interact with the game.
 
@@ -118,6 +124,10 @@ class Client(object):
     new_ctx = ctx.repack(msg_parts)
     new_ctx.stream.handle_cmd(new_ctx)
 
+  def __getattr__(self, key):
+    if key.startswith('on_') or key.startswith('cmd_'):
+      return getattr(self.user, key)
+    raise AttributeError(key)
 
 
 class LocationClient(object):
