@@ -296,6 +296,12 @@ class BasicTestCase(test.TestCase):
     joined_event = self.bot_1.events['joined'].get(timeout=2)
     self.assertEquals(joined_event['user_id'], self.bot_2.id)
 
+    raw_message = 'hello bot_1'
+    cl_2._say(raw_message)
+    said_event = self.bot_1.events['said'].get(timeout=2)
+    self.assertEquals(said_event['user_id'], self.bot_2.id)
+    self.assertEquals(said_event['raw_message'], raw_message)
+
     # look again and verify that bot 2 shows up
     rv = cl_1._look()
     self.assert_(self.bot_2.id in rv['users'])

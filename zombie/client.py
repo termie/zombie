@@ -112,6 +112,9 @@ class Client(object):
   def _look(self):
     return self.location.look()
 
+  def _say(self, s):
+    return self.location.say(s)
+
   def cmd_look(self, ctx):
     return self.user.cmd_look(ctx)
 
@@ -167,6 +170,10 @@ class LocationClient(object):
 
   def look_at_other(self, other_id):
     rv = self.ctx.route_cmd(other_id, 'look', {})
+    return rv.next()
+
+  def say(self, s):
+    rv = self.ctx.send_cmd('say', {'message': s})
     return rv.next()
 
 

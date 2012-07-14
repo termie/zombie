@@ -110,6 +110,13 @@ class Location(object):
          'users': self.user_db.keys()}
     return ctx.reply(o)
 
+  def cmd_say(self, ctx, message):
+    self.broadcast('said', {'user_id': ctx.caller_id,
+                            'message': '%s said "%s"' % (ctx.caller_id,
+                                                         message),
+                            'raw_message': message})
+    ctx.reply({'result': 'ok'})
+
   def cmd_route(self, ctx, other_id, package):
     """Route a message to another user in this location.
 
