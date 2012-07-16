@@ -27,6 +27,9 @@ gflags.DEFINE_integer('spawn_timeout', 1,
                       'how long to allow spawned greenthreads')
 
 
+LOG = logging.getLogger(__name__)
+
+
 class TestCase(unittest.TestCase):
   def setUp(self):
     self.monkey_patch_spawn()
@@ -40,7 +43,7 @@ class TestCase(unittest.TestCase):
     spawned = self._real_spawn(eventlet.with_timeout,
                                FLAGS.spawn_timeout,
                                *args, **kw)
-    logging.debug('spawned %s', args[0])
+    LOG.debug('SPAWN %s', args[0])
     self._spawned.append(spawned)
     return spawned
 

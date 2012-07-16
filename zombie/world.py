@@ -4,6 +4,8 @@ from zombie import db
 from zombie import model
 
 
+LOG = logging.getLogger(__name__)
+
 class World(object):
   """Handle the tasks a world must handle. So heavy is this burden.
 
