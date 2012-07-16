@@ -5,6 +5,7 @@
 import eventlet
 eventlet.monkey_patch()
 
+import code
 import logging
 import os
 import pprint
@@ -40,7 +41,11 @@ def main():
   cl = client.Client(user_ref)
   cl._rejoin_game(FLAGS.world)
 
-  shared.pool.waitall()
+  #shared.pool.waitall()
+  vars = globals().copy()
+  vars.update(locals())
+  shell = code.InteractiveConsole(vars)
+  shell.interact()
 
 
 if __name__ == '__main__':
