@@ -204,11 +204,12 @@ class Stream(object):
     logging.debug('CONNECT %s', address)
     self.sock = shared.zctx.socket(zmq.XREQ)
     self.sock.connect(address)
-
+    logging.debug('CONNECTED')
     shared.pool.spawn(callback,
                       ConnectContext(stream=self,
                                      signer=self.handler,
                                      msg_parts=['{}', None, None]))
+    logging.debug('AFTER CB')
     while not self.sock.closed:
       time.sleep(FLAGS.sleep_time)
       try:

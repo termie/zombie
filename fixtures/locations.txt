@@ -1,0 +1,67 @@
+awakening
+You are cold. You shake. You cannot breathe. The liquid around you drains
+away and you open your eyes to a birthing chamber.
+
+EXITS
+the door: testing_chamber_0
+
+
+testing_chamber_0
+This is a small white room. There is a console.
+
+EXITS
+the door: testing_chamber_1
+
+
+testing_chamber_1
+This is another small white room. There is another console.
+
+EXITS:
+the door: testing_chamber_2
+
+
+testing_chamber_2
+This is the final small white room. There is a console.
+
+EXITS:
+the door: the_classroom
+
+
+the_classroom
+This is a classroom. It looks like things have fallen into disrepair.
+
+A broken message appears to be on loop.
+
+EXITS:
+the hallway: the_foyer
+
+
+the_foyer
+A large empty room with exits leading to the rest of the building. The
+front door appears to be sealed shut by massive blast doors.
+
+EXITS:
+east: the_east_wing
+west: the_west_wing
+up: the_mezzanine
+
+
+the_east_wing
+dead end for now
+
+EXITS:
+west: the_foyer
+
+
+the_west_wing
+dead end for now
+
+EXITS:
+east: the_foyer
+
+
+the_mezzanine
+dead end for now
+
+EXITS:
+down: the_foyer
