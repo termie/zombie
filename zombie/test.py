@@ -59,7 +59,7 @@ def skip_if_fast(f):
   return _wrapped
 
 
-def setup_test_fixtures():
+def old_fixtures_stuff():
   return
   db_prefix = 'test' + uuid.uuid4().hex
   world_id = 'the_world'
@@ -136,9 +136,10 @@ def main():
       argv.insert(1, '--pdb')
     if not FLAGS.logcapture:
       argv.insert(1, '--nologcapture')
+    argv.insert(1, '--where=tests')
     c = config.Config(stream=sys.stdout,
                       env=os.environ,
-                      verbosity=3,
+                      verbosity=2,
                       plugins=core.DefaultPluginManager())
 
     runner = TestRunner(stream=c.stream,

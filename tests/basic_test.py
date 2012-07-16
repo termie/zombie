@@ -43,52 +43,24 @@ class EchoHandler(object):
     context['stream'].close()
 
 
-class BaseTestCase(test.TestCase):
-  def _get_server(self):
-    return net.Stream(EchoHandler())
+class EventQueue(object):
+  def __init__(self):
+    self.queues = {}
 
-  def _get_client(self):
-    return net.Stream(TestHandler())
-
-  def call(self, cb):
-    callback_called = [False]
-    s = self._get_server()
-    c = self._get_client()
-
-    @functools.wraps(cb)
-    def _cb(*args, **kw):
-      callback_called[0] = True
-      rv = cb(*args, **kw)
-      s.close()
-      c.close()
-      return rv
-
-    self.spawn(s.serve, WORLD_ADDR)
-    self.spawn(c.connect, WORLD_ADDR, _cb)
-    shared.pool.waitall()
-    self.assert_(callback_called)
+  def __getitem__(self, key):
+    if key in self.queues:
+      return self.queues[key]
+    self.queues[key] = queue.LightQueue()
+    return self.queues[key]
 
 
-#class WorldTestCase(BaseTestCase):
-#  def _get_server(self):
-#    return net.Stream(world.World(location_db=location_db,
-#                                            user_db=user_db))
+class TestUser(client.User):
+  def __init__(self, *args, **kw):
+    super(TestUser, self).__init__(*args, **kw)
+    self.events = EventQueue()
 
-#  def test_world_default_location(self):
-#    def cb(context):
-#      r = context.send_cmd('default_location')
-#      for result in r:
-#        self.assertEqual(result['default'], location_db['default'])
-
-#    self.call(cb)
-
-#  def test_world_lookup_location(self):
-#    def cb(context):
-#      r = context.send_cmd('lookup_location', {'location_id': 'default'})
-#      for result in r:
-#        self.assertEqual(result['default'], location_db['default'])
-
-#    self.call(cb)
+  def on_event(self, ctx, topic, data):
+    self.events[topic].put(data)
 
 
 #class StreamTestCase(test.TestCase):
@@ -130,25 +102,6 @@ class BaseTestCase(test.TestCase):
 #    self.spawn(c.connect, WORLD_ADDR, cb)
 #    shared.pool.waitall()
 #    self.assert_(callback_called[0])
-
-class EventQueue(object):
-  def __init__(self):
-    self.queues = {}
-
-  def __getitem__(self, key):
-    if key in self.queues:
-      return self.queues[key]
-    self.queues[key] = queue.LightQueue()
-    return self.queues[key]
-
-
-class TestUser(client.User):
-  def __init__(self, *args, **kw):
-    super(TestUser, self).__init__(*args, **kw)
-    self.events = EventQueue()
-
-  def on_event(self, ctx, topic, data):
-    self.events[topic].put(data)
 
 
 class BasicTestCase(test.TestCase):
