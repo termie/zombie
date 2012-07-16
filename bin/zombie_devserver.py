@@ -44,6 +44,7 @@ gflags.DEFINE_string('bind', 'tcp://127.0.0.1',
 gflags.DEFINE_integer('port', '2222',
                       'port for the world')
 
+
 def load_locations(path):
   """Quick naive parser for our silly location definition language."""
   o = []
