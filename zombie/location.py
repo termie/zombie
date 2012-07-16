@@ -9,6 +9,9 @@ from zombie import net
 from zombie import shared
 
 
+LOG = logging.getLogger(__name__)
+
+
 class Location(object):
   """Handle the tasks a location must handle. That which never ends.
 
@@ -30,6 +33,15 @@ class Location(object):
     #self.broadcast = broadcast
     #self.keys = Keystore()
 
+  def debug(self, msg, *args, **kw):
+    """Quick, naive helper to add some data to log messages."""
+    # TODO(termie): refactor this into logging library
+    msg = '%s:%s:' + msg
+    args = list(args)
+    args.insert(0, self.__class__.__name__)
+    args.insert(1, self.id)
+    LOG.debug(msg, *args, **kw)
+
   def verify(self, msg_parts):
     data, caller_id, sig = msg_parts
     assert sig == 'signature'
@@ -42,14 +54,12 @@ class Location(object):
     world_ev = event.Event()
     self.world_stream = net.Stream(self.world_handler)
     shared.pool.spawn(self.world_stream.connect, address, world_ev.send)
-    logging.debug('WAITING')
     world_context = world_ev.wait()
-    logging.debug('FINSIHED')
     self.world = LocationWorldClient(self, world_context)
     return self.world
 
   def broadcast(self, topic, data):
-    logging.debug('BROADCAST %s: %s', topic, data)
+    self.debug('BROADCAST %s: %s', topic, data)
     evt = {'topic': topic,
            'data': data}
     for ctx in self.user_db.values():
@@ -83,7 +93,6 @@ class Location(object):
     join_token_ref = model.JoinToken.from_dict(join_token)
     self.world.update_user_location(join_token)
     ctx.reply({'result': 'ok'})
-    logging.debug('AFTER JOIN REPLY')
 
     # Add the user to our local db
     self.user_db.set(join_token_ref.user_id, ctx)
@@ -92,16 +101,11 @@ class Location(object):
     # TODO(termie): possibly should provide some original contect
     #               to verify the action causing this broadcast
     self.broadcast_joined(ctx.caller_id, join_token['from_id'])
-    #self.broadcast_joined(ctx.username, join_token['from_id'])
-    time.sleep(0.2)
 
   def cmd_move(self, ctx, user_id, new_location_id):
     """Provide the user with a join_token for the new location."""
-    logging.debug('LOC MOVE')
     o = self.world.make_join_token(user_id, self.location_id, new_location_id)
-    logging.debug('BEFORE LOC_MOVE REPLY')
     ctx.reply(o)
-    logging.debug('AFTER LOC_MOVE')
     self.user_db.delete(user_id)
 
   def cmd_look(self, ctx):
@@ -124,9 +128,8 @@ class Location(object):
 
     Results will be sent back to the caller.
     """
-    logging.debug('GOT ORUTE')
+    self.debug('ROUTE TO %s', other_id)
     other_ctx = self.user_db.get(other_id)
-    logging.debug('GOT ORUTE')
     rv = other_ctx.send_cmd('route', {'other_id': other_id,
                                       'package': package})
     for x in rv:
@@ -158,9 +161,7 @@ class LocationWorldClient(object):
                            data={'user_id': user_id,
                                  'from_id': from_id,
                                  'location_id': location_id})
-    logging.debug('FOO_LOC_WORLD')
     o = rv.next()
-    logging.debug('AFTER FOO_LOC_WORLD')
     return o
 
 

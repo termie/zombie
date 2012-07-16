@@ -70,6 +70,7 @@ def load_locations(path):
 
 
 def main():
+  logging.basicConfig()
   logging.getLogger().setLevel(logging.DEBUG)
   world_address = '%s:%s' % (FLAGS.bind, FLAGS.port)
   locations = load_locations(FLAGS.locations)

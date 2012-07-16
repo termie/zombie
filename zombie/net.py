@@ -1,5 +1,6 @@
 import json
 import logging
+import pprint
 import time
 import uuid
 
@@ -15,6 +16,10 @@ from zombie import shared
 FLAGS = gflags.FLAGS
 gflags.DEFINE_float('sleep_time', 0.001,
                     'how long to wait in event loops')
+
+
+LOG = logging.getLogger(__name__)
+
 
 class Context(dict):
   def __init__(self, signer, stream, msg_parts):
@@ -161,16 +166,35 @@ class Stream(object):
     self.handler = handler
     self._reply_waiters = {}
 
+  def debug(self, msg, *args, **kw):
+    """Quick, naive helper to add some data to log messages."""
+    # TODO(termie): refactor this into logging library
+    msg = '%s:%s:' + msg
+    args = list(args)
+    args.insert(0, self.handler.__class__.__name__)
+    args.insert(1, self.handler.id)
+    LOG.debug(msg, *args, **kw)
+
   def serve(self, address):
     """Listen on an XREP socket."""
-    logging.debug('SERVE %s', address)
+    self.debug('SERVE %s', address)
     self.sock = shared.zctx.socket(zmq.XREP)
     self.sock.bind(address)
     while not self.sock.closed:
       time.sleep(FLAGS.sleep_time)
       try:
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
-        logging.debug('<SRECV %s', parts)
+        if LOG.getEffectiveLevel() == logging.DEBUG:
+          try:
+            pretty = pprint.pformat(json.loads(parts[1]), indent=2)
+            pretty = pretty.replace('\n', '\n  ')
+          except Exception:
+            pretty = parts[1]
+          try:
+            self.debug('SRECV %s (%s)\n  %s', parts[2], parts[3], pretty)
+          except Exception:
+            LOG.exception('IN LOG SRECV %s', parts)
+
         ident = parts.pop(0)
         self.handler.verify(parts)
         ctx = ServeContext(stream=self,
@@ -195,26 +219,34 @@ class Stream(object):
   def serve_broadcast(self, address):
     """Bind with an PUB socket."""
     return
-    logging.debug('SERVE BROADCAST %s', address)
+    self.debug('SERVE BROADCAST %s', address)
     self.bsock = shard.zctx.socket(zmq.PUB)
     self.bsock.bind(address)
 
   def connect(self, address, callback):
     """Connect with an XREQ socket."""
-    logging.debug('CONNECT %s', address)
+    self.debug('CONNECT %s', address)
     self.sock = shared.zctx.socket(zmq.XREQ)
     self.sock.connect(address)
-    logging.debug('CONNECTED')
     shared.pool.spawn(callback,
                       ConnectContext(stream=self,
                                      signer=self.handler,
                                      msg_parts=['{}', None, None]))
-    logging.debug('AFTER CB')
     while not self.sock.closed:
       time.sleep(FLAGS.sleep_time)
       try:
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
-        logging.debug('<CRECV %s', parts)
+        if LOG.getEffectiveLevel() == logging.DEBUG:
+          try:
+            pretty = pprint.pformat(json.loads(parts[0]), indent=2)
+            pretty = pretty.replace('\n', '\n  ')
+          except Exception:
+            pretty = parts[0]
+          try:
+            self.debug('CRECV %s (%s)\n  %s', parts[1], parts[2], pretty)
+          except Exception:
+            LOG.exception('IN LOG CRECV %s', parts)
+
         self.handler.verify(parts)
         ctx = ConnectContext(stream=self,
                              signer=self.handler,
@@ -226,7 +258,7 @@ class Stream(object):
         elif ctx['cmd'] == 'end_reply':
           shared.pool.spawn(self.handle_end_reply, ctx)
         elif ctx['cmd'] == 'event':
-          logging.debug('HANDLE EVENT')
+          self.debug('HANDLE EVENT')
           shared.pool.spawn(self.handle_event, ctx)
         else:
           shared.pool.spawn(self.handle_cmd, ctx)
@@ -239,7 +271,7 @@ class Stream(object):
   #               over connected clients
   def connect_broadcast(self, address, callback):
     return
-    logging.debug('CONNECT BROADCAST %s', address)
+    self.debug('CONNECT BROADCAST %s', address)
     self.bsock = shared.zctx.socket(zmq.SUB)
     self.bsock.setsockopt(zmq.SUBSCRIBE, '')
     self.bsock.connect(address)
@@ -252,7 +284,7 @@ class Stream(object):
       time.sleep(FLAGS.sleep_time)
       try:
         parts = self.sock.recv_multipart(flags=zmq.NOBLOCK)
-        logging.debug('<CBRECV %s', parts)
+        self.debug('<CBRECV %s', parts)
         self.handler.verify(parts)
         ctx = ConnectContext(stream=self,
                              signer=self.handler,
@@ -300,7 +332,7 @@ class Stream(object):
       f = getattr(self.handler, 'cmd_%s' % ctx['cmd'])
       f(ctx, **dict((str(k), v) for k, v in ctx['args'].iteritems()))
     except Exception as e:
-      logging.exception('EXC in handle_cmd\ncmd_%s(**%s)', ctx['cmd'], ctx['args'])
+      LOG.exception('EXC in handle_cmd\ncmd_%s(**%s)', ctx['cmd'], ctx['args'])
       ctx.reply_exc(e)
 
   def handle_event(self, ctx):
@@ -311,5 +343,5 @@ class Stream(object):
                   getattr(self.handler, 'on_event'))
       f(ctx, **dict((str(k), v) for k, v in ctx['args'].iteritems()))
     except Exception as e:
-      logging.exception('EXC in handle_event\non_%s(**%s)',
+      LOG.exception('EXC in handle_event\non_%s(**%s)',
                         ctx['args']['topic'], ctx['args'])

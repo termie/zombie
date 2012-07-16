@@ -18,6 +18,15 @@ class World(object):
     self.user_db = user_db
     self.id = world_id
 
+  def debug(self, msg, *args, **kw):
+    """Quick, naive helper to add some data to log messages."""
+    # TODO(termie): refactor this into logging library
+    msg = '%s:%s:' + msg
+    args = list(args)
+    args.insert(0, self.__class__.__name__)
+    args.insert(1, self.id)
+    LOG.debug(msg, *args, **kw)
+
   def verify(self, msg_parts):
     data, caller_id, sig = msg_parts
     assert sig == 'signature'
@@ -55,10 +64,10 @@ class World(object):
     token = model.JoinToken.from_dict({'user_id': user_id,
                                        'from_id': from_id,
                                        'location_id': location_id})
-    logging.debug('BEFORE WORLD_JOIN')
+    self.debug('BEFORE WORLD_JOIN')
     ctx.reply({'address': location_ref.address,
                'join_token': token.to_dict()})
-    logging.debug('AFTER WORLD_JOIN')
+    self.debug('AFTER WORLD_JOIN')
 
 
 class WorldUserDatabase(db.Kvs):

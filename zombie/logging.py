@@ -25,6 +25,7 @@ def setup():
   root.addHandler(stderr_handler)
   root.setLevel(level)
 
+DEBUG = logging.DEBUG
 
 log = logging.log
 exception = logging.exception
