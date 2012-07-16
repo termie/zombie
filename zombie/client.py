@@ -25,6 +25,7 @@ class User(object):
   def on_event(self, ctx, topic, data):
     pass
 
+
 class Client(object):
   """Holds on to a user object and uses it to interact with the game.
 
@@ -176,6 +177,8 @@ class LocationClient(object):
     rv = self.ctx.send_cmd('say', {'message': s})
     return rv.next()
 
+  def send_cmd(self, *args, **kwargs):
+    return self.ctx.send_cmd(*args, **kwargs)
 
 
 class WorldClient(object):
@@ -191,3 +194,5 @@ class WorldClient(object):
     last_loc = rv.next()
     return last_loc
 
+  def send_cmd(self, *args, **kwargs):
+    return self.ctx.send_cmd(*args, **kwargs)
