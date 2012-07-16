@@ -7,27 +7,32 @@ Things are still pretty raw, using this file to keep track of ideas and whatnot.
 Stuff is starting to stabilize a bit so will begin documentation pretty soon.
 
 
+TL;DR
+-----
+
+
+
 Getting Started
 ===============
 
-you'll need to make a world and a character for that world first.
+You'll want to install dependencies first. You can usually do that with:
 
-./tools/generate_world.py foo
-./tools/generate_character.py termie foo
-./tools/load_locations.py foo fixtures/locations.json
+  $ pip install -r tools/pip-requires
 
-From there you'll be able to run world_server and client.
+After that the quickest way to test the basic game is to load up the
+devserver. The devserver (`bin/zombie_devserver.py`) will load up the world
+server and all the location servers in a single process.
 
-./world_server.py
-./client.py
+  $ ./bin/zombie_devserver.py
 
-They are both extremely chatty right now.
+The game server will stay in the foreground.
 
-The client is using TextUi which is a not very advanced interface... basically
-it lets you type stuff in and send that to the server, the first word is the
-command and the rest of the words are the arguments. Some commands are
-intercepted by the UI and result in multiple or alternate commands.
+An example of a basic game client is in `bin/zombie_devclient.py`. It will
+be expanded as more features become available. For now you can run:
 
+  $ ./bin/zombie_devclient.py
+
+And you'll see some activity happen on the client and the server.
 
 
 Thoughts
