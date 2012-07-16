@@ -59,12 +59,11 @@ class Location(object):
     return self.world
 
   def broadcast(self, topic, data):
-    self.debug('BROADCAST %s: %s', topic, data)
+    self.debug('BROADCAST %s:\n  %s', topic, data)
     evt = {'topic': topic,
            'data': data}
     for ctx in self.user_db.values():
       ctx.send_cmd('event', data=evt, noreply=True)
-
 
   def _location_to_direction(self, from_id):
     for k, v in self.exits.iteritems():
