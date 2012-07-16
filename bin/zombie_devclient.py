@@ -64,6 +64,7 @@ def main():
 
   #shared.pool.waitall()
   banner = """
+=======================================================================
   You are now in an interactive python shell.
 
   You've got couple variables already floating around in here:
@@ -71,6 +72,7 @@ def main():
     cl: the client object
       - _move_location($location_id)
 
+=======================================================================
   """
   vars = globals().copy()
   vars.update(locals())
