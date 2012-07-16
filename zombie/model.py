@@ -21,6 +21,10 @@ class Location(mm.Model):
   address = AddressField()
 
 
+class Object(mm.Model):
+  id = mm.CharField()
+
+
 class JoinToken(mm.Model):
   """General authorization to enter an area.
 

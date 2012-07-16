@@ -22,12 +22,15 @@ class Location(object):
     - Providing information about itself (look)
 
   """
+
   description = 'A location.'
 
-  def __init__(self, user_db, location_id, exits, address): #, broadcast):
+  def __init__(self, user_db, location_id, exits, address, objects=None):
     self.user_db = user_db
+    self.object_db = LocationObjectDatabase()
     self.location_id = location_id
     self.id = location_id
+    self.objects = objects or {}
     self.exits = exits
     self.address = address
     #self.broadcast = broadcast
@@ -81,7 +84,6 @@ class Location(object):
                               'from_id': from_id,
                               'message': msg})
 
-
   def cmd_join(self, ctx, join_token):
     """Handle a user trying to join this location.
 
@@ -100,6 +102,10 @@ class Location(object):
     # TODO(termie): possibly should provide some original contect
     #               to verify the action causing this broadcast
     self.broadcast_joined(ctx.caller_id, join_token['from_id'])
+
+  def cmd_join_as_object(self, ctx):
+    ctx.reply({'result': 'ok'})
+    self.object_db.set(ctx.caller_id, ctx)
 
   def cmd_move(self, ctx, user_id, new_location_id):
     """Provide the user with a join_token for the new location."""
@@ -134,12 +140,20 @@ class Location(object):
     for x in rv:
       ctx.reply(x)
 
-  def cmd_interact(self, ctx, other_name, verb):
-    """Interact with the location.
+  def cmd_interact(self, ctx, other_name, package):
+    """Interact with the location, by routing to an object
 
     In most cases these interactions will be with with items that are not
     explicitly visible but are described in the room's description.
     """
+    self.debug('INTERACT WITH %s', other_name)
+    obj_ref = self.objects.get(other_name)
+    obj_ctx = self.object_db.get(obj_ref.id)
+    rv = obj_ctx.send_cmd('route', {'other_id': obj_ref.id,
+                                    'package': package})
+
+    for x in rv:
+      ctx.reply(x)
 
 
 class LocationWorldClient(object):
@@ -162,6 +176,10 @@ class LocationWorldClient(object):
                                  'location_id': location_id})
     o = rv.next()
     return o
+
+
+class LocationObjectDatabase(db.Kvs):
+  deserialize = model.Object.from_dict
 
 
 class LocationUserDatabase(db.Kvs):

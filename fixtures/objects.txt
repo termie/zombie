@@ -1,0 +1,14 @@
+rock_singularity
+This rock seems to exist in all locations.
+
+TRIGGERS:
+not used: not used
+
+
+testing_console_0
+This is the first test console.
+
+TRIGGERS:
+not used: not used
+
+

@@ -28,6 +28,7 @@ import zmq
 from zombie import location
 from zombie import model
 from zombie import net
+from zombie import npc
 from zombie import shared
 from zombie import world
 
@@ -35,6 +36,8 @@ from zombie import world
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string('locations', 'fixtures/locations.txt',
                      'where to look for location fixtures')
+gflags.DEFINE_string('objects', 'fixtures/objects.txt',
+                     'where to look for object fixtures')
 gflags.DEFINE_string('user', 'darkthorn',
                      'id of default user')
 gflags.DEFINE_string('last_location', 'awakening',
@@ -51,18 +54,50 @@ def load_locations(path):
   current = {}
   for line in open(path):
     line = line.strip()
+    print line
     if 'id' not in current and line:
       current['id'] = line
     elif line.startswith('EXITS'):
       current['exits'] = {}
+    elif line.startswith('OBJECTS'):
+      current['objects'] = {}
     elif 'id' in current and 'exits' not in current:
       desc = current.get('description', [])
       desc.append(line)
       current['description'] = desc
-    elif 'exits' in current:
+    elif 'exits' in current and 'objects' not in current:
       if line:
         name, location = line.split(': ', 1)
         current['exits'][name] = location
+    elif 'exits' in current and 'objects' in current:
+      if line:
+        name, location = line.split(': ', 1)
+        current['objects'][name] = location
+      else:
+        current['description'] = '\n'.join(current['description'])
+        o.append(current)
+        current = {}
+  return o
+
+
+def load_objects(path):
+  """Quick naive parser for our silly object definition language."""
+  o = []
+  current = {}
+  for line in open(path):
+    line = line.strip()
+    if 'id' not in current and line:
+      current['id'] = line
+    elif line.startswith('TRIGGERS'):
+      current['triggers'] = {}
+    elif 'id' in current and 'triggers' not in current:
+      desc = current.get('description', [])
+      desc.append(line)
+      current['description'] = desc
+    elif 'triggers' in current:
+      if line:
+        name, location = line.split(': ', 1)
+        current['triggers'][name] = location
       else:
         current['description'] = '\n'.join(current['description'])
         o.append(current)
@@ -73,9 +108,13 @@ def load_locations(path):
 def main():
   logging.basicConfig()
   logging.getLogger().setLevel(logging.DEBUG)
+
   world_address = '%s:%s' % (FLAGS.bind, FLAGS.port)
   locations = load_locations(FLAGS.locations)
   pprint.pprint(locations)
+
+  objects = load_objects(FLAGS.objects)
+  pprint.pprint(objects)
 
   # squat some random ports so we can add the addresses to our locations
   ports = []
@@ -102,14 +141,27 @@ def main():
     loc_ref = location.Location(user_db=location.LocationUserDatabase(),
                                 location_id=loc['id'],
                                 exits=loc['exits'],
+                                objects=loc['objects'],
                                 address=loc['address'])
     loc_refs.append(loc_ref)
+
+  obj_refs = {}
+  for obj in objects:
+    obj_ref = npc.ObjectNpc(obj_id=obj['id'],
+                            description=obj['description'])
+    obj_refs[obj['id']] = obj_ref
+
 
   # Launch all the servers
   shared.pool.spawn(net.Stream(w_ref).serve, world_address)
   for loc_ref in loc_refs:
     shared.pool.spawn(net.Stream(loc_ref).serve, loc_ref.address)
     loc_ref._connect_to_world(world_address)
+    obj_ids = list(set(loc_ref.objects.values()))
+    for obj_id in obj_ids:
+      npc.spawn_object(obj_refs[obj_id], loc_ref.address)
+
+
   shared.pool.waitall()
 
 if __name__ == '__main__':

@@ -5,12 +5,19 @@ away and you open your eyes to a birthing chamber.
 EXITS
 the door: testing_chamber_0
 
+OBJECTS
+the rock: rock_singularity
+
 
 testing_chamber_0
 This is a small white room. There is a console.
 
 EXITS
 the door: testing_chamber_1
+
+OBJECTS
+the rock: rock_singularity
+console: testing_console_0
 
 
 testing_chamber_1
@@ -19,12 +26,18 @@ This is another small white room. There is another console.
 EXITS:
 the door: testing_chamber_2
 
+OBJECTS
+the rock: rock_singularity
+
 
 testing_chamber_2
 This is the final small white room. There is a console.
 
 EXITS:
 the door: the_classroom
+
+OBJECTS
+the rock: rock_singularity
 
 
 the_classroom
@@ -34,6 +47,9 @@ A broken message appears to be on loop.
 
 EXITS:
 the hallway: the_foyer
+
+OBJECTS
+the rock: rock_singularity
 
 
 the_foyer
@@ -45,12 +61,18 @@ east: the_east_wing
 west: the_west_wing
 up: the_mezzanine
 
+OBJECTS
+the rock: rock_singularity
+
 
 the_east_wing
 dead end for now
 
 EXITS:
 west: the_foyer
+
+OBJECTS
+the rock: rock_singularity
 
 
 the_west_wing
@@ -59,9 +81,17 @@ dead end for now
 EXITS:
 east: the_foyer
 
+OBJECTS
+the rock: rock_singularity
+
 
 the_mezzanine
 dead end for now
 
 EXITS:
 down: the_foyer
+
+OBJECTS
+the rock: rock_singularity
+
+

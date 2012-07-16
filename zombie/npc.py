@@ -12,6 +12,7 @@ Responses are also governed by a few kinds of state:
   - Local state: some other trigger has already caused our state to change
 """
 
+from zombie import client
 from zombie import shared
 
 
@@ -35,8 +36,10 @@ class RegexEventMatcher(object):
 class Npc(object):
   description = 'An NPC.'
 
-  def __init__(self, npc_id):
+  def __init__(self, npc_id, description=None):
     self.id = npc_id
+    if description:
+      self.description = description
 
   def react_time(self, time_desc, callback):
     """Do something based on some time check."""
@@ -47,10 +50,20 @@ class Npc(object):
   def react_event(self, matcher, callback):
     self._event_matchers.append((matcher, callback))
 
-  def handle_event(self, ctx, evt):
+  def on_event(self, ctx, evt):
     for matcher, callback in self._event_matchers:
       if matcher.match(evt):
         shared.pool.spawn(callback, ctx, evt)
 
 
+class ObjectNpc(Npc):
+  def __init__(self, obj_id, description=None):
+    super(ObjectNpc, self).__init__(obj_id, description=description)
 
+
+def spawn_object(obj, address):
+  cl = client.Client(obj)
+  cl._connect_to_location(address)
+  rv = cl.location.send_cmd('join_as_object')
+  rv.next()
+  return cl
