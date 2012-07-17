@@ -139,6 +139,25 @@ class Client(object):
     raise AttributeError(key)
 
 
+class ObjectProxy(object):
+  """Represent a remote object locally.
+
+  The goal here is for methods called on the local objects to result in
+  calls to the remote objects, providing an nicer UI in the shell.
+  """
+  def __init__(self, location_client, object_name):
+    self.location = location_client
+    self.object_name = object_name
+
+  def __getattr__(self, key):
+    def _proxy(data=None):
+      return self.location.interact(self.object_name, key, data)
+
+    _proxy.func_name = '_proxy_%s' % key
+    setattr(self, key, _proxy)
+    return _proxy
+
+
 class LocationClient(object):
   """Interface to the various commands we might send to a location."""
 
