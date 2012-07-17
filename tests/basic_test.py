@@ -11,6 +11,7 @@ from eventlet import queue
 from zombie import client
 from zombie import location
 from zombie import net
+from zombie import npc
 from zombie import shared
 from zombie import test
 from zombie import world
@@ -128,6 +129,7 @@ class BasicTestCase(test.TestCase):
       #'broadcast': 'ipc:///tmp/loc_a_bcast',
       'users': {},
       'exits': {'east': 'loc_b'},
+      'objects': {'the rock': 'obj_z'},
       }
 
   fixture_loc_b = {
@@ -136,6 +138,7 @@ class BasicTestCase(test.TestCase):
       #'broadcast': 'ipc:///tmp/loc_b_bcast',
       'users': {},
       'exits': {'east': 'loc_a'},
+      'objects': {'the rock': 'obj_z'},
       }
 
   fixture_bot_1 = {
@@ -146,11 +149,17 @@ class BasicTestCase(test.TestCase):
       'id': 'bot_2',
       }
 
+  fixture_obj_z = {
+      'id': 'obj_z',
+      'description': 'the only rock in the universe',
+      }
+
   def setUp(self):
     super(BasicTestCase, self).setUp()
     self.load_world(self.fixture_world)
     self.load_loc_a(self.fixture_loc_a)
     self.load_loc_b(self.fixture_loc_b)
+    self.load_obj_z(self.fixture_obj_z)
     self.load_bot_1(self.fixture_bot_1)
     self.load_bot_2(self.fixture_bot_2)
 
@@ -166,7 +175,8 @@ class BasicTestCase(test.TestCase):
         location_id=fixture['id'],
         address=fixture['address'],
         #broadcast=fixture['broadcast'],
-        exits=fixture['exits'])
+        exits=fixture['exits'],
+        objects=fixture['objects'])
 
   def load_loc_b(self, fixture):
     self.loc_b = location.Location(
@@ -174,13 +184,18 @@ class BasicTestCase(test.TestCase):
         location_id=fixture['id'],
         address=fixture['address'],
         #broadcast=fixture['broadcast'],
-        exits=fixture['exits'])
+        exits=fixture['exits'],
+        objects=fixture['objects'])
 
   def load_bot_1(self, fixture):
     self.bot_1 = TestUser(**fixture)
 
   def load_bot_2(self, fixture):
     self.bot_2 = TestUser(**fixture)
+
+  def load_obj_z(self, fixture):
+    self.obj_z = npc.ObjectNpc(obj_id=fixture['id'],
+                               description=fixture['description'])
 
   def spawn_world(self):
     world_stream = net.Stream(self.world)
@@ -205,10 +220,18 @@ class BasicTestCase(test.TestCase):
     self.loc_b._connect_to_world(self.fixture_world['address'])
     return loc_b_stream
 
+  def spawn_obj_z(self):
+    for loc in self.fixture_world['locations'].values():
+      cl = client.Client(self.obj_z)
+      cl._connect_to_location(loc['address'])
+      rv = cl.location.send_cmd('join_as_object')
+      rv.next()
+
   def test_it(self):
     world = self.spawn_world()
     loc_a = self.spawn_loc_a()
     loc_b = self.spawn_loc_b()
+    obj_z = self.spawn_obj_z()
     #bot_1 = self.spawn_bot_1()
     #bot_2 = self.spawn_bot_2()
 
@@ -226,6 +249,9 @@ class BasicTestCase(test.TestCase):
     rv = cl_1._look()
     self.assert_(self.loc_b.id in rv['exits'].values())
     self.assert_(self.bot_1.id in rv['users'])
+
+    rv = cl_1._interact('the rock', 'look')
+    self.assertEquals(rv['description'], self.obj_z.description)
 
     # move to a new location
     cl_1._move_location(self.loc_b.id)

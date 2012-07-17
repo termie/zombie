@@ -110,6 +110,11 @@ class Client(object):
     look_rv = self.location.look_at_other(other_id)
     return look_rv
 
+  def _interact(self, other_name, verb, data=None):
+    data = data or {}
+    rv = self.location.interact(other_name, verb, data)
+    return rv
+
   def _look(self):
     return self.location.look()
 
@@ -167,6 +172,14 @@ class LocationClient(object):
 
   def look(self):
     rv = self.ctx.send_cmd('look')
+    return rv.next()
+
+  def interact(self, other_name, verb, data=None):
+    data = data or {}
+    rv = self.ctx.interact_cmd(other_name, verb, data)
+    # TODO(termie): this should probably return the iterator, but right now
+    #               everything expects the return values to be congealed
+    #               results
     return rv.next()
 
   def look_at_other(self, other_id):

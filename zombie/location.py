@@ -147,9 +147,9 @@ class Location(object):
     explicitly visible but are described in the room's description.
     """
     self.debug('INTERACT WITH %s', other_name)
-    obj_ref = self.objects.get(other_name)
-    obj_ctx = self.object_db.get(obj_ref.id)
-    rv = obj_ctx.send_cmd('route', {'other_id': obj_ref.id,
+    obj_id = self.objects.get(other_name)
+    obj_ctx = self.object_db.get(obj_id)
+    rv = obj_ctx.send_cmd('route', {'other_id': obj_id,
                                     'package': package})
 
     for x in rv:
@@ -179,7 +179,8 @@ class LocationWorldClient(object):
 
 
 class LocationObjectDatabase(db.Kvs):
-  deserialize = model.Object.from_dict
+  #deserialize = model.Object.from_dict
+  pass
 
 
 class LocationUserDatabase(db.Kvs):

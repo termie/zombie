@@ -55,6 +55,9 @@ class Npc(object):
       if matcher.match(evt):
         shared.pool.spawn(callback, ctx, evt)
 
+  def cmd_look(self, ctx):
+    ctx.reply({'description': self.description})
+
 
 class ObjectNpc(Npc):
   def __init__(self, obj_id, description=None):

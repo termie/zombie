@@ -122,6 +122,19 @@ class Context(dict):
     return self.send_cmd('route', {'other_id': other_id,
                                    'package': actual_package_data})
 
+  def interact_cmd(self, other_id, cmd, data=None):
+    package = {'msg_id': uuid.uuid4().hex, # NOTE(termie): not used?
+               'cmd': cmd,
+               'args': data or {},
+               }
+    package_data = json.dumps(package)
+    caller_id, package_sig = self._sign(package_data)
+    actual_package = [package_data, caller_id, package_sig]
+    actual_package_data = json.dumps(actual_package)
+
+    return self.send_cmd('interact', {'other_name': other_id,
+                                      'package': actual_package_data})
+
   def repack(self, msg_parts):
     o = self.__class__(stream=self.stream,
                        signer=self.signer,
