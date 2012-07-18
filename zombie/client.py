@@ -69,6 +69,12 @@ class Shell(object):
     self.client._move_location(exit_id)
     return self.look()
 
+  def say(self, s):
+    self.client._say(s)
+
+  def on_event(self, ctx, topic, data):
+    self._out('-> %s' % data['message'])
+
 
 class Client(object):
   """Holds on to a user object and uses it to interact with the game.
@@ -82,6 +88,7 @@ class Client(object):
     self.world = None
     self.location = None
     self.id = self.user.id
+    self._listeners = []
 
   def verify(self, msg_parts):
     data, caller_id, sig = msg_parts
@@ -165,6 +172,9 @@ class Client(object):
   def _say(self, s):
     return self.location.say(s)
 
+  def register_listener(self, func):
+    self._listeners.append(func)
+
   def cmd_look(self, ctx):
     return self.user.cmd_look(ctx)
 
@@ -176,6 +186,11 @@ class Client(object):
     self.verify(msg_parts)
     new_ctx = ctx.repack(msg_parts)
     new_ctx.stream.handle_cmd(new_ctx)
+
+  def on_event(self, ctx, topic, data):
+    self.user.on_event(ctx, topic, data)
+    for listener in self._listeners:
+      listener(ctx, topic, data)
 
   def __getattr__(self, key):
     if key.startswith('on_') or key.startswith('cmd_'):

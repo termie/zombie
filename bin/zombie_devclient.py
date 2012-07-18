@@ -62,6 +62,7 @@ def main():
   cl = client.Client(user_ref)
   cl._rejoin_game(FLAGS.world)
   sh = client.Shell(cl)
+  cl.register_listener(sh.on_event)
 
   #shared.pool.waitall()
   banner = """
