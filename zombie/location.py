@@ -25,14 +25,15 @@ class Location(object):
 
   description = 'A location.'
 
-  def __init__(self, user_db, location_id, exits, address, objects=None):
+  def __init__(self, user_db, location_id, exits, address, **kw):
     self.user_db = user_db
     self.object_db = LocationObjectDatabase()
     self.location_id = location_id
     self.id = location_id
-    self.objects = objects or {}
+    self.objects = kw.get('objects', {})
     self.exits = exits
     self.address = address
+    self.description = kw.get('description', self.description)
     #self.broadcast = broadcast
     #self.keys = Keystore()
 
@@ -135,6 +136,9 @@ class Location(object):
     """
     self.debug('ROUTE TO %s', other_id)
     other_ctx = self.user_db.get(other_id)
+    if not other_ctx:
+      ctx.reply({'result': 'error'})
+      return
     rv = other_ctx.send_cmd('route', {'other_id': other_id,
                                       'package': package})
     for x in rv:

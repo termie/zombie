@@ -154,6 +154,7 @@ def main():
                   location_id=loc['id'],
                   exits=loc['exits'],
                   objects=loc['objects'],
+                  description=loc['description'],
                   address=loc['address'])
     loc_refs.append(loc_ref)
 

@@ -56,15 +56,16 @@ except ImportError:
     print '''You should install readline... try: python `python -c "import pimp; print pimp.__file__"` -i readline'''
 
 def main():
-  logging.getLogger().setLevel(logging.DEBUG)
+  logging.getLogger().setLevel(logging.WARNING)
 
   user_ref = client.User(id=FLAGS.user)
   cl = client.Client(user_ref)
   cl._rejoin_game(FLAGS.world)
+  sh = client.Shell(cl)
 
   #shared.pool.waitall()
   banner = """
-=======================================================================
+  =====================================================================
   You are now in an interactive python shell.
 
   You've got couple variables already floating around in here:
@@ -72,12 +73,16 @@ def main():
     cl: the client object
       - _move_location($location_id)
 
-=======================================================================
+  =====================================================================
   """
+  shell_commands = dict((k, getattr(sh, k)) for k in dir(sh))
   vars = globals().copy()
   vars.update(locals())
+  vars.update(shell_commands)
   shell = code.InteractiveConsole(vars)
-  shell.interact(banner)
+  shell.push('print banner')
+  shell.push('look()')
+  shell.interact('')
 
 
 if __name__ == '__main__':

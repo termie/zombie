@@ -26,6 +26,50 @@ class User(object):
     pass
 
 
+class Shell(object):
+  """Provide a nice interface to the client."""
+  def __init__(self, client):
+    self.client = client
+    self._exits = {}
+    self.ls = 'Uhhh, you just typed ls, try look() instead.'
+
+  def _out(self, s):
+    print s
+
+  def debug(self, value=True):
+    if value:
+      logging.getLogger().setLevel(logging.DEBUG)
+    else:
+      logging.getLogger().setLevel(logging.WARNING)
+
+  def exits(self):
+    self._out('Exits: %s' % ', '.join(self._exits.keys()))
+    return self._exits
+
+  def look(self, other_id=None):
+    if not other_id:
+      rv = self.client._look()
+      self._exits = rv['exits']
+      self._out('%s\nExits: %s' % (rv['description'],
+                                   ', '.join(rv['exits'].keys())))
+      return self.client.location
+
+    rv = self.client._look_at_other(other_id)
+    if 'description' in rv:
+      self._out(rv['description'])
+    rv = self.client._interact(other_id, 'look')
+    if 'description' in rv:
+      self._out(rv['description'])
+
+  def move(self, name):
+    if name in self._exits:
+      exit_id = self._exits[name]
+    else:
+      exit_id = name
+    self.client._move_location(exit_id)
+    return self.look()
+
+
 class Client(object):
   """Holds on to a user object and uses it to interact with the game.
 

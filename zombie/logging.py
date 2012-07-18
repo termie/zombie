@@ -26,6 +26,7 @@ def setup():
   root.setLevel(level)
 
 DEBUG = logging.DEBUG
+WARNING = logging.WARNING
 
 log = logging.log
 exception = logging.exception
