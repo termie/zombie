@@ -139,7 +139,10 @@ def main():
   # Generate our state objects
   default_user = model.User.from_kwargs(id=FLAGS.user,
                                         last_location=FLAGS.last_location)
-  w_user_db = world.WorldUserDatabase(**{FLAGS.user: default_user.to_dict()})
+  second_user = model.User.from_kwargs(id=FLAGS.user + '2',
+                                        last_location=FLAGS.last_location)
+  w_user_db = world.WorldUserDatabase(**{FLAGS.user: default_user.to_dict(),
+                                         second_user.id: second_user.to_dict()})
   w_loc_db = world.WorldLocationDatabase(**dict((loc['id'], loc)
                                                  for loc in locations))
 
