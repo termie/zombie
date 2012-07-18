@@ -70,3 +70,6 @@ def spawn_object(obj, address):
   rv = cl.location.send_cmd('join_as_object')
   rv.next()
   return cl
+
+
+

@@ -30,6 +30,7 @@ from zombie import model
 from zombie import net
 from zombie import npc
 from zombie import shared
+from zombie import util
 from zombie import world
 
 
@@ -54,9 +55,12 @@ def load_locations(path):
   current = {}
   for line in open(path):
     line = line.strip()
-    print line
     if 'id' not in current and line:
-      current['id'] = line
+      parts = line.split(': ', 1)
+      # The line has a colon in it, we're referencing an object to import
+      current['id'] = parts[0]
+      if len(parts) > 1:
+        current['class'] = parts[1]
     elif line.startswith('EXITS'):
       current['exits'] = {}
     elif line.startswith('OBJECTS'):
@@ -87,7 +91,11 @@ def load_objects(path):
   for line in open(path):
     line = line.strip()
     if 'id' not in current and line:
-      current['id'] = line
+      parts = line.split(': ', 1)
+      # The line has a colon in it, we're referencing an object to import
+      current['id'] = parts[0]
+      if len(parts) > 1:
+        current['class'] = parts[1]
     elif line.startswith('TRIGGERS'):
       current['triggers'] = {}
     elif 'id' in current and 'triggers' not in current:
@@ -138,17 +146,25 @@ def main():
   w_ref = world.World(location_db=w_loc_db, user_db=w_user_db, world_id='foo')
   loc_refs = []
   for loc in locations:
-    loc_ref = location.Location(user_db=location.LocationUserDatabase(),
-                                location_id=loc['id'],
-                                exits=loc['exits'],
-                                objects=loc['objects'],
-                                address=loc['address'])
+    if 'class' in loc:
+      cls = util.import_class(loc['class'])
+    else:
+      cls = location.Location
+    loc_ref = cls(user_db=location.LocationUserDatabase(),
+                  location_id=loc['id'],
+                  exits=loc['exits'],
+                  objects=loc['objects'],
+                  address=loc['address'])
     loc_refs.append(loc_ref)
 
   obj_refs = {}
   for obj in objects:
-    obj_ref = npc.ObjectNpc(obj_id=obj['id'],
-                            description=obj['description'])
+    if 'class' in obj:
+      cls = util.import_class(obj['class'])
+    else:
+      cls = npc.ObjectNpc
+    obj_ref = cls(obj_id=obj['id'],
+                  description=obj['description'])
     obj_refs[obj['id']] = obj_ref
 
 
