@@ -80,7 +80,7 @@ class Location(object):
     if direction:
       msg = '%s entered from the %s.' % (user_id, direction)
     else:
-      msg = '%s rejoined.' % user_id
+      msg = '%s entered the room.' % user_id
     self.broadcast('joined', {'user_id': user_id,
                               'from_id': from_id,
                               'message': msg})
