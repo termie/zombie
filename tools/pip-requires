@@ -1,12 +1,13 @@
 nose
 python-gflags
-mox
--f http://pymox.googlecode.com/files/mox-0.5.0.tar.gz
-python-keyczar
--f http://keyczar.googlecode.com/files/python-keyczar-0.6b.061709.tar.gz
-pycrypto
-pyasn1
-redis
+# mox
+# -f http://pymox.googlecode.com/files/mox-0.5.0.tar.gz
+# python-keyczar
+# -f http://keyczar.googlecode.com/files/python-keyczar-0.6b.061709.tar.gz
+# pycrypto
+# pyasn1
+# redis
 eventlet
 pyzmq
 micromodels
+PyGithub

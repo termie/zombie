@@ -9,6 +9,17 @@ from zombie import net
 from zombie import shared
 
 
+LOG = logging.getLogger(__name__)
+
+
+try:
+  from zombie import gh
+except ImportError:
+  logging.warning('Could not import zombie.gh, you probably need'
+                  ' to install PyGithub.')
+  gh = None
+
+
 class User(object):
   description = 'A user.'
 
@@ -28,10 +39,17 @@ class User(object):
 
 class Shell(object):
   """Provide a nice interface to the client."""
+
+  class tool(object):
+    """Inner class to hold on to our toolkit."""
+
+    gh = gh
+
   def __init__(self, client):
     self.client = client
     self._exits = {}
     self.ls = 'Uhhh, you just typed ls, try look() instead.'
+
 
   def _out(self, s):
     print s
@@ -61,6 +79,8 @@ class Shell(object):
     if 'description' in rv:
       self._out(rv['description'])
 
+    return rv
+
   def move(self, name):
     if name in self._exits:
       exit_id = self._exits[name]
@@ -71,6 +91,21 @@ class Shell(object):
 
   def say(self, s):
     self.client._say(s)
+
+  def use(self, name):
+    rv = self.client._interact(name, 'use')
+    if 'message' in rv:
+      self._out(rv['message'])
+    return rv
+
+  def show(self, name, data):
+    rv = self.client._interact(name, 'show', {'data': data})
+    if 'message' in rv:
+      self._out(rv['message'])
+    return rv
+
+  def proxy(self, name):
+    return ObjectProxy(self.client.location, name)
 
   def on_event(self, ctx, topic, data):
     self._out('-> %s' % data['message'])

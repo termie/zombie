@@ -5,8 +5,8 @@ TRIGGERS:
 not used: not used
 
 
-testing_console_0: zombie.objects.console.Console
-This is the first test console.
+testing_console_0: zombie.objects.console.GithubConsole
+This is the first test console. Try use-ing it.
 
 TRIGGERS:
 not used: not used
