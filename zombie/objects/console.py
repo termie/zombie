@@ -1,3 +1,7 @@
+import json
+import uuid
+
+from zombie import gh
 from zombie import npc
 
 
@@ -66,4 +70,11 @@ class GithubConsole(Console):
 
   def cmd_show(self, ctx, data):
     """Do something cool using the github api."""
-    pass
+    if 'token' in data:
+      github_login = gh.get_identity(data['token'])
+      item = {'id': uuid.uuid4().hex,
+              'description': 'A github identity card for %s' % github_login,
+              'github_login': github_login}
+      item_s = json.dumps(item)
+      signer_id, sig = ctx._sign(item_s)
+      ctx.reply({'item': [item_s, signer_id, sig]})

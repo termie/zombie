@@ -4,6 +4,7 @@ import logging
 import gflags
 from eventlet import event
 
+from zombie import db
 from zombie import model
 from zombie import net
 from zombie import shared
@@ -25,6 +26,7 @@ class User(object):
 
   def __init__(self, id):
     self.id = id
+    self.items_db = UserItemDatabase()
 
   def cmd_look(self, ctx):
     """Somebody is looking at you, what do you tell them."""
@@ -35,6 +37,18 @@ class User(object):
 
   def on_event(self, ctx, topic, data):
     pass
+
+  def store(self, name, item):
+    self.items_db.set(name, item)
+
+  def items(self, name=None):
+    if name is None:
+      return self.items_db.items()
+    return self.items_db.get(name)
+
+
+class UserItemDatabase(db.Kvs):
+  pass
 
 
 class Shell(object):
@@ -103,6 +117,12 @@ class Shell(object):
     if 'message' in rv:
       self._out(rv['message'])
     return rv
+
+  def store(self, name, item):
+    return self.client.user.store(name, item)
+
+  def items(self, name=None):
+    return self.client.user.items(name)
 
   def proxy(self, name):
     return ObjectProxy(self.client.location, name)
