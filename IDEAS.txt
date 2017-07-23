@@ -88,3 +88,82 @@ For design purposes:
   - create a tool to visualize location layout
 
 
+Layers / Multiple Reality:
+  - Keys are shared and trusted, people start off trusting the world
+    key
+  - Signed content vs encrypted content, signed content public but
+    not necessarily trusted, encrypted content requires sharing a
+    key, by default both are ignored when unknown
+  - Initial awakening from tutorial fantasy world that is revealed to
+    be a simulation that teaches you to add the fingerprint for the
+    "real" world to start accepting that content
+
+Presence / Map Enforcement:
+  - World needs a way to prevent people being in two locations at
+    once, clients and nodes must subscribe to a global presence
+    service, nodes do not allow entry without multi-party handshake
+    - Does the map know the map or do the nodes know the map?
+      - Nodes know the map:
+        - must agree to share a portal with each other
+        - must be aware of allowed incoming nodes
+        - outgoing room signs a move request from the client,
+          presence server signs the move request,
+          client hands request to new room,
+          new room signs it and hands it to presence server,
+          presence server updates presence
+      - Presence server knows the map:
+        - nodes must trust the presence server
+        - nodes don't need to know about each other
+        - outgoing room signs a move request from the client,
+          presence server signs the move request,
+          client is removed from the room,
+          client hands the move request to new room,
+          incoming room accepts request (already verified by world)
+        - makes teleporting easier, probably
+
+
+Chat Channels:
+  - Chat services are advertised, you can connect your client to them
+  - Some are anonymous, gevulot style, your fingerprint is your id,
+    if you've got a handle for somebody you can use that as a reference
+  - Is it possible to just use IRC? Don't know whether we actually want
+    to be a chat protocol
+    - without some group chat with this anon stuff it'd be hard to
+      organize anything
+    - maybe can leverage some existing tech and wrap it in crypto
+  - re crypto it seems like there isn't a good forward secrecy group
+    chat protocol, seems like most solutions don't scale to large
+    groups
+    - may be able to do something like have a single host who acts
+      as the hub and exchanges symm keys with a limited number of
+      people, your trust then relies on trusting the hub individual
+    - https://security.stackexchange.com/questions/126768/which-protocols-exist-for-end-to-end-encrypted-group-chat
+
+General comm protocol:
+  - Ask server to connect you to other, signed
+  - other decides whether to accept your request
+  - ECDH exchange or whatever with other
+  - sign your request and send it over
+  - other decides whether to respond
+  - talk all encryptedstyle
+  Notes:
+    - server knows who you are trying to communicate with and
+      whether they responded
+    - server doesn't know what you asked, though does know the size
+      of the result
+    - could maybe assign a third party arbiter and use out-of-band
+      identifiers to route a la Tor
+
+
+Scifi Concepts:
+  - The Oubliette and Gevulot (quantum thief)
+    - Privacy fog: allow settings on what is seen and shared, people
+                   only have names if they share one, up to you to
+                   associate them, people can change their IDs and
+                   fingerprints to lose their identity
+    - Changing cityscape: allow portals to move about on an scheduled
+                          basis, maybe something like wormhole space,
+                          would be cool if there were some weights that
+                          helped them re-associate with thematically
+                          good places
+  -
